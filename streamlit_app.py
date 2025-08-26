@@ -509,7 +509,7 @@ def upload_and_analyze_tab():
     
     with col2:
         st.markdown("💡 **Need more control?**")
-        st.markdown("[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com) Upload `BYU_Pathway_Topic_Modeling_Colab.ipynb`")
+        st.markdown("[![Open in Google Colab](https://colab.research.google.com/drive/1TPGv-qhQXlJe5Z3OAOrZ1O6USNlwHl21?usp=sharing) - `BYU_Pathway_Topic_Modeling_Colab.ipynb`")
     
     if uploaded_file is not None:
         # Show file preview
