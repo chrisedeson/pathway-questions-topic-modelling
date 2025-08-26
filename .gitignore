@@ -212,4 +212,13 @@ data/*.csv
 data/*.json
 data/*.xlsx
 data/*.xls
+data/*.pkl
 !data/README.md
+
+# Results folder and CSV files
+results/
+*.csv
+*pathway*.csv
+
+# Streamlit cache and temporary files
+.streamlit/
