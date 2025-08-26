@@ -684,31 +684,72 @@ def display_analysis_summary(df):
         st.plotly_chart(fig_conf, use_container_width=True)
     
     with col2:
-        # Scrollable topic list
+        # Scrollable topic list in its own container
         st.subheader("📋 All Topics")
         
-        # Create a scrollable container with proper Streamlit HTML rendering
-        st.markdown("""
-        <div style="height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 15px; border-radius: 8px; background-color: #f8f9fa;">
-        """, unsafe_allow_html=True)
+        # Simple topic list without complex containers
         
-        # Render each topic as individual HTML components within the container
+        # Display topics as simple list items
         for _, row in topic_analysis.iterrows():
             confidence_color = "🟢" if row['Avg_Confidence'] > 0.7 else "🟡" if row['Avg_Confidence'] > 0.5 else "🔴"
             
-            # Use st.markdown for each topic card
             st.markdown(f"""
-            <div style="margin-bottom: 12px; padding: 10px; background-color: white; border-radius: 5px; border-left: 4px solid #007bff; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-                <div style="font-weight: bold; color: #333; margin-bottom: 5px;">{row['Topic_Name']}</div>
-                <div style="font-size: 12px; color: #666;">
-                    📊 {row['Count']} questions | 
-                    {confidence_color} {row['Avg_Confidence']:.2f} avg confidence |
-                    📈 {row['Std_Confidence']:.2f} std dev
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+            **{row['Topic_Name']}**  
+            📊 {row['Count']} questions | {confidence_color} {row['Avg_Confidence']:.2f} avg confidence | 📈 {row['Std_Confidence']:.2f} std dev
+            """)
         
-        st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("""
+            <style>
+            .scrollable-topics {
+                height: 380px;
+                overflow-y: auto;
+                overflow-x: hidden;
+                padding: 10px;
+                margin-top: -420px;
+                margin-left: 16px;
+                margin-right: 16px;
+                position: relative;
+                z-index: 10;
+            }
+            .topic-card {
+                background-color: white;
+                padding: 12px;
+                margin-bottom: 8px;
+                border-radius: 6px;
+                border-left: 4px solid #007bff;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            .topic-title {
+                font-weight: bold;
+                color: #333;
+                font-size: 14px;
+                margin-bottom: 4px;
+            }
+            .topic-stats {
+                font-size: 12px;
+                color: #666;
+                line-height: 1.4;
+            }
+            </style>
+            <div class="scrollable-topics">
+            """, unsafe_allow_html=True)
+            
+            # Render each topic as individual components
+            for _, row in topic_analysis.iterrows():
+                confidence_color = "🟢" if row['Avg_Confidence'] > 0.7 else "�" if row['Avg_Confidence'] > 0.5 else "🔴"
+                
+                st.markdown(f"""
+                <div class="topic-card">
+                    <div class="topic-title">{row['Topic_Name']}</div>
+                    <div class="topic-stats">
+                        📊 {row['Count']} questions | 
+                        {confidence_color} {row['Avg_Confidence']:.2f} avg confidence |
+                        📈 {row['Std_Confidence']:.2f} std dev
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            st.markdown("</div>", unsafe_allow_html=True)
         
         # Quick stats
         st.subheader("📊 Quick Stats")
@@ -786,8 +827,15 @@ def display_analysis_summary(df):
             mime="text/csv",
             type="primary"
         )
+        
+        # Quick stats
+        st.subheader("📊 Quick Stats")
+        st.write(f"**Largest Topic:** {topic_counts.iloc[0]['Topic_Name']} ({topic_counts.iloc[0]['Count']} questions)")
+        st.write(f"**Smallest Topic:** {topic_counts.iloc[-1]['Topic_Name']} ({topic_counts.iloc[-1]['Count']} questions)")
+        st.write(f"**Most Confident Topic:** {topic_analysis.loc[topic_analysis['Avg_Confidence'].idxmax(), 'Topic_Name']} ({topic_analysis['Avg_Confidence'].max():.2f})")
+        st.write(f"**Least Confident Topic:** {topic_analysis.loc[topic_analysis['Avg_Confidence'].idxmin(), 'Topic_Name']} ({topic_analysis['Avg_Confidence'].min():.2f})")
     
-    with col2:
+    with col3:
         # Export topic summary
         topic_summary_csv = topic_analysis.to_csv(index=False)
         st.download_button(
@@ -796,8 +844,7 @@ def display_analysis_summary(df):
             file_name=f"topic_summary_{timestamp}.csv",
             mime="text/csv"
         )
-    
-    with col3:
+        
         if st.button("🔄 Analyze New Questions", type="secondary"):
             st.session_state.analysis_complete = False
             st.session_state.current_results = None
