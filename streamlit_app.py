@@ -450,7 +450,7 @@ def main():
     if not api_key:
         st.error("🔑 OpenAI API key not found. Please add your API key to the .env file.")
         st.code("OPENAI_API_KEY=your_api_key_here")
-        st.info("💡 **Need an interactive analysis session?** [Open in Google Colab](https://colab.research.google.com) - Upload the `BYU_Pathway_Topic_Modeling_Colab.ipynb` file")
+        st.info("💡 **Need an interactive analysis session?** [Open in Google Colab](https://colab.research.google.com/drive/1TPGv-qhQXlJe5Z3OAOrZ1O6USNlwHl21?usp=sharing) - `BYU_Pathway_Topic_Modeling_Colab.ipynb`")
         return
     
     # Initialize session state for tab control
