@@ -11,8 +11,8 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
 # Model Configuration  
-EMBEDDING_MODEL = "text-embedding-3-large"
-CHAT_MODEL = "gpt-4o-mini"
+EMBEDDING_MODEL = os.getenv('OPENAI_EMBEDDING_MODEL', "text-embedding-3-large")
+CHAT_MODEL = os.getenv('OPENAI_CHAT_MODEL', "gpt-4o-mini")
 
 # Clustering Configuration
 MIN_CLUSTER_SIZE = 15  # Updated from 5 to 15 as requested

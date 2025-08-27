@@ -8,7 +8,7 @@ from typing import Optional
 from pathlib import Path
 
 from utils import validate_questions_file, create_session_state_defaults, calculate_clustering_metrics
-from visualizations import display_metrics_overview, create_download_section
+from visualizations import display_metrics_overview
 
 
 def display_header():
@@ -84,9 +84,6 @@ def display_analysis_summary(df: pd.DataFrame, metrics: Optional[dict] = None):
         
         **Coverage:** {metrics['categorized_percentage']:.1f}% of questions categorized
         """)
-    
-    # Download section
-    create_download_section(df)
 
 
 def display_question_explorer(df: pd.DataFrame):
@@ -225,7 +222,7 @@ def upload_and_analyze_tab():
             
             with col3:
                 st.markdown("💡 **Need more control?**")
-                st.markdown("[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1TPGv-qhQXlJe5Z3OAOrZ1O6USNlwHl21?usp=sharing)")
+                st.markdown("[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1zOLprkByUwWutJPGo2VMB83yMd9LxQGB?usp=sharing)")
             
             # Run analysis
             if analyze_button:

@@ -215,6 +215,10 @@ data/*.xls
 data/*.pkl
 !data/README.md
 
+# Models folder and pickle files
+models/
+*.pkl
+
 # Results folder and CSV files
 results/
 *.csv

@@ -27,7 +27,8 @@ def load_analysis_results() -> Optional[pd.DataFrame]:
 
 def load_topic_model():
     """Load saved topic model if available"""
-    model_files = list(Path(".").glob("topic_model_*.pkl"))
+    models_dir = Path("models")
+    model_files = list(models_dir.glob("topic_model_*.pkl"))
     if not model_files:
         return None
     
@@ -48,7 +49,9 @@ def save_results(df: pd.DataFrame, topic_model=None) -> str:
     
     # Save topic model if provided
     if topic_model is not None:
-        model_path = f"topic_model_{timestamp}.pkl"
+        models_dir = Path("models")
+        models_dir.mkdir(exist_ok=True)
+        model_path = models_dir / f"topic_model_{timestamp}.pkl"
         with open(model_path, 'wb') as f:
             pickle.dump(topic_model, f)
     
