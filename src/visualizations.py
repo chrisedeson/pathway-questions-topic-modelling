@@ -64,16 +64,6 @@ def display_interactive_scatter(df: pd.DataFrame, topic_model: Optional[BERTopic
             )
             
             st.plotly_chart(fig, use_container_width=True, key="scatter_plot_interactive")
-            
-            # Enhanced teen-friendly tip
-            st.success("🎮 **Pro Tip:** This chart is interactive! You can:")
-            st.markdown("""
-            - **🖱️ Hover** over any dot to see the full question
-            - **🔍 Zoom** in/out with your mouse wheel  
-            - **👆 Pan** by clicking and dragging
-            - **📍 Focus** on specific topic colors in the legend
-            - **🎯 Look for clusters** - dots close together = similar questions!
-            """)
             return
                 
         except Exception as e:
