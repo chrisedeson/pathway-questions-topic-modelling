@@ -61,21 +61,6 @@ make streamlit    # Launch Streamlit dashboard
 make clean        # Clean up environment
 ```
 
-## 📁 Project Structure
-
-```
-pathway-questions-topic-modelling/
-├── README.md                          # This file
-├── Makefile                           # Automation commands
-├── requirements.txt                   # Python dependencies
-├── .env.template                      # Environment variables template
-├── data/                             # Data directory
-│   ├── README.md                     # Data format documentation
-│   └── extracted_user_inputs_*.txt   # Your question datasets
-├── Text_Clustering_&_Topic_Modeling_*.ipynb  # Main analysis notebook
-├── results/                          # Generated outputs (created automatically)
-└── .venv/                           # Virtual environment (created by make)
-```
 
 ## 📊 Data Format
 
