@@ -37,41 +37,55 @@ def create_enhanced_metrics_tab(df: pd.DataFrame, topic_model: Optional[BERTopic
     # Hero metrics section
     st.subheader("📊 Key Metrics Overview")
     
+    # Add a helpful explanation box
+    with st.expander("❔ What do these numbers mean?", expanded=False):
+        st.markdown("""
+        **🎯 Total Questions:** How many questions we analyzed (like counting all students in a school)
+        
+        **🎪 Clusters Found:** How many different topic groups we discovered (like different clubs or subjects)
+        
+        **✅ Questions Clustered:** Questions we successfully put into topic groups (like students who joined clubs)
+        
+        **❌ Questions Not Clustered:** Questions that didn't fit any topic clearly (like students who haven't found their group yet)
+        
+        **📈 Categorization Rate:** What percentage of questions we successfully organized (higher is better!)
+        """)
+    
     col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
         st.metric(
             label="🎯 Total Questions",
             value=total_questions,
-            help="Total number of questions analyzed"
+            help="Total number of questions analyzed - this is our complete dataset size"
         )
     
     with col2:
         st.metric(
             label="🎪 Clusters Found",
             value=unique_clusters,
-            help="Number of distinct topic clusters discovered"
+            help="Number of distinct topic clusters discovered - each cluster represents a different type of question students ask"
         )
     
     with col3:
         st.metric(
             label="✅ Questions Clustered", 
             value=clustered_questions,
-            help="Questions successfully assigned to clusters"
+            help="Questions successfully assigned to clusters - these questions have clear topics the AI could identify"
         )
     
     with col4:
         st.metric(
             label="❌ Questions Not Clustered",
             value=unclustered_questions,
-            help="Questions that couldn't be categorized (noise)"
+            help="Questions that couldn't be categorized into any topic - these might be unique, unclear, or need more examples to form a topic"
         )
     
     with col5:
         st.metric(
             label="📈 Categorization Rate",
             value=f"{categorized_percentage:.1f}%",
-            help="Percentage of questions successfully categorized"
+            help="Percentage of questions successfully categorized - shows how well the AI understood your question patterns"
         )
     
     st.divider()
@@ -79,9 +93,13 @@ def create_enhanced_metrics_tab(df: pd.DataFrame, topic_model: Optional[BERTopic
     # Visual breakdown
     st.subheader("📊 Visual Analytics")
     
+    # Add explanation for the visual section
+    st.info("👀 **Visual Guide:** These charts help you see your data at a glance. The pie chart shows the big picture of categorized vs uncategorized questions, while the bar chart shows which topics are most common.")
+    
     viz_col1, viz_col2 = st.columns(2)
     
     with viz_col1:
+        st.markdown("**🥧 Categorization Breakdown**")
         # Categorization pie chart
         fig_pie = go.Figure(data=[go.Pie(
             labels=['Categorized', 'Uncategorized'],
@@ -104,6 +122,7 @@ def create_enhanced_metrics_tab(df: pd.DataFrame, topic_model: Optional[BERTopic
         st.plotly_chart(fig_pie, use_container_width=True, key="categorization_pie_chart")
     
     with viz_col2:
+        st.markdown("**📊 Top 10 Most Common Topics**")
         # Top topics bar chart
         topic_counts = df[df['Topic_ID'] != -1].groupby('Topic_Name').size().reset_index(name='Count')
         topic_counts = topic_counts.sort_values('Count', ascending=False).head(10)
@@ -124,9 +143,40 @@ def create_enhanced_metrics_tab(df: pd.DataFrame, topic_model: Optional[BERTopic
         )
         
         st.plotly_chart(fig_bar, use_container_width=True, key="top_topics_bar_chart")
+        
+        with st.expander("❔ How to interpret this chart"):
+            st.markdown("""
+            **📊 Reading the Bar Chart:**
+            - **Longer bars** = More students ask about this topic
+            - **Shorter bars** = Less common questions  
+            - **Order matters** = Topics are sorted from most to least common
+            - **Colors** = Just for visual appeal, darker usually means higher values
+            
+            **💡 What this tells you:**
+            - Which topics need the most attention from support staff
+            - What questions to prepare FAQ answers for
+            - Where to focus training and resources
+            """)
     
     # Success indicators
     st.subheader("🎉 Analysis Quality Indicators")
+    
+    # Add explanation for quality indicators
+    with st.expander("❔ What do these quality indicators mean?"):
+        st.markdown("""
+        **🎯 Categorization Quality:** How well the AI organized your questions
+        - 🟢 **Excellent (80%+):** AI understood most question patterns clearly
+        - 🟡 **Good (60-79%):** AI did well, some questions were unclear  
+        - 🔴 **Needs Improvement (<60%):** Many questions were too unique or unclear
+        
+        **⚖️ Cluster Distribution:** Whether we have the right number of topic groups
+        - 🟢 **Well Balanced (10-50 clusters):** Good variety without being overwhelming
+        - 🟡 **Moderate (5-9 clusters):** Okay but might be too broad
+        - 🔴 **Too Few (<5 clusters):** Topics are probably too general
+        
+        **⚙️ Configuration Status:** Technical settings that affect results
+        - Shows if the AI is using the best settings for your data
+        """)
     
     indicator_col1, indicator_col2, indicator_col3 = st.columns(3)
     
@@ -164,21 +214,26 @@ def create_enhanced_metrics_tab(df: pd.DataFrame, topic_model: Optional[BERTopic
     st.divider()
     st.subheader("📥 Download for Review")
     
+    # Add explanation for downloads
+    st.info("💾 **Download Options:** Get your analysis results in different formats for different purposes!")
+    
     download_col1, download_col2 = st.columns(2)
     
     with download_col1:
-        st.markdown("**📋 Standard Analysis Download**")
+        st.markdown("**📋 Complete Data Download**")
+        st.caption("Perfect for further analysis or sharing with technical team")
         csv_standard = df.to_csv(index=False)
         st.download_button(
             label="⬇️ Download Complete Analysis",
             data=csv_standard,
             file_name=f"pathway_questions_complete_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
             mime="text/csv",
-            help="Full analysis with all columns and metrics"
+            help="Full analysis with all columns and metrics - includes confidence scores, topic IDs, and all technical details"
         )
     
     with download_col2:
-        st.markdown("**📝 Elder Edwards Review Format**")
+        st.markdown("**📝 Clean Review Format**")
+        st.caption("Simplified format for easy reading and review")
         # Create the exact format requested: representation and question columns, sorted
         review_df = df[['Topic_Name', 'Question']].copy()
         review_df = review_df.rename(columns={'Topic_Name': 'representation'})
@@ -187,11 +242,11 @@ def create_enhanced_metrics_tab(df: pd.DataFrame, topic_model: Optional[BERTopic
         
         csv_review = review_df.to_csv(index=False)
         st.download_button(
-            label="⬇️ Download Review CSV",
+            label="⬇️ Download Review Format", 
             data=csv_review,
             file_name=f"pathway_questions_review_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
             mime="text/csv",
-            help="Sorted by topic and question for Elder Edwards review"
+            help="Clean format with just topic names and questions, sorted by topic for easy review - perfect for managers and reviewers"
         )
     
     # Topic model insights if available

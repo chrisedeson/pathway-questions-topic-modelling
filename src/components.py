@@ -11,6 +11,23 @@ from utils import validate_questions_file, create_session_state_defaults, calcul
 from visualizations import display_metrics_overview
 
 
+def create_chart_header(title: str, explanation: str, icon: str = "❔"):
+    """Create a chart header with a helpful tooltip explanation"""
+    col1, col2 = st.columns([10, 1])
+    with col1:
+        st.subheader(title)
+    with col2:
+        st.markdown(f"""
+        <div style="text-align: right; padding-top: 10px;">
+            <span title="{explanation}" style="font-size: 16px; cursor: help;">{icon}</span>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Also show as an expandable info box for mobile/accessibility
+    with st.expander("ℹ️ What does this chart show?", expanded=False):
+        st.info(explanation)
+
+
 def display_header():
     """Display app header with styling"""
     st.markdown('<h1 class="main-header" style="margin-bottom: 0.5rem;">🎓 BYU Pathway Questions Analysis</h1>', unsafe_allow_html=True)
@@ -90,6 +107,9 @@ def display_question_explorer(df: pd.DataFrame):
     """Display question exploration interface"""
     st.header("🔍 Question Explorer")
     
+    # Add helpful explanation
+    st.info("🎯 **Explore Your Questions:** Use the filters below to find specific questions, explore topics, or see how confident the AI was about different categorizations!")
+    
     # Filters
     col1, col2, col3 = st.columns(3)
     
@@ -97,24 +117,20 @@ def display_question_explorer(df: pd.DataFrame):
         selected_topics = st.multiselect(
             "Select Topics",
             options=sorted(df['Topic_Name'].unique()),
-            help="Filter questions by topic"
+            help="Filter questions by topic - choose one or more topics to focus on"
         )
     
     with col2:
         min_confidence = st.slider(
             "Minimum Confidence",
-            min_value=0.0,
-            max_value=1.0,
-            value=0.0,
-            step=0.01,
-            help="Filter by confidence score"
+            0.0, 1.0, 0.0, 0.1,
+            help="Filter by confidence score - higher values show questions the AI was more sure about"
         )
     
     with col3:
-        search_term = st.text_input(
-            "Search Questions",
-            placeholder="Enter keywords...",
-            help="Search within question text"
+        search_text = st.text_input(
+            "Search in Questions",
+            help="Search for specific words or phrases within the question text"
         )
     
     # Apply filters
@@ -126,17 +142,29 @@ def display_question_explorer(df: pd.DataFrame):
     if min_confidence > 0:
         filtered_df = filtered_df[filtered_df['Probability'] >= min_confidence]
     
-    if search_term:
+    if search_text:
         filtered_df = filtered_df[
-            filtered_df['Question'].str.contains(search_term, case=False, na=False)
+            filtered_df['Question'].str.contains(search_text, case=False, na=False)
         ]
     
     # Display results
     st.subheader(f"📋 Questions ({len(filtered_df)} found)")
     
     if len(filtered_df) == 0:
-        st.warning("No questions match your filters. Try adjusting the criteria.")
+        st.warning("😅 No questions match your filters. Try adjusting the criteria above!")
+        st.info("💡 **Tips:** Try selecting fewer topics, lowering the confidence threshold, or using different search words.")
         return
+    
+    # Add explanation of confidence colors
+    with st.expander("❔ What do the confidence colors mean?"):
+        st.markdown("""
+        **Confidence Score Colors:**
+        - 🟢 **Green (0.7+):** AI is very confident about this topic assignment
+        - 🟡 **Yellow (0.4-0.7):** AI is somewhat confident, but not totally sure  
+        - 🔴 **Red (below 0.4):** AI had to guess - this question might fit multiple topics
+        
+        **Higher confidence = Better topic assignment**
+        """)
     
     # Sort options
     sort_col1, sort_col2 = st.columns(2)
@@ -145,7 +173,7 @@ def display_question_explorer(df: pd.DataFrame):
         sort_by = st.selectbox(
             "Sort by",
             ['Topic_Name', 'Probability', 'Question'],
-            help="Choose how to sort the results"
+            help="Choose how to sort the results - try sorting by confidence to see the most/least certain classifications"
         )
     
     with sort_col2:
@@ -180,18 +208,33 @@ def upload_and_analyze_tab():
     """Upload and analyze tab with enhanced UI"""
     st.header("📤 Upload Questions File")
     
-    # File uploader with better guidance
-    st.markdown("""
-    **Instructions:**
-    1. Prepare a `.txt` file with one question per line
-    2. Recommended: 50+ questions for meaningful analysis  
-    3. Ensure questions are clean and properly formatted
-    """)
+    # Enhanced file upload guidance
+    st.info("🎯 **Getting Started:** Upload your questions file to discover topics and patterns using AI!")
+    
+    with st.expander("📋 File Format Requirements", expanded=True):
+        st.markdown("""
+        **✅ What you need:**
+        - A `.txt` file (plain text)
+        - One question per line
+        - At least 50+ questions (more is better!)
+        - Questions should be clear and complete
+        
+        **✨ Tips for best results:**
+        - Remove duplicates beforehand 
+        - Keep questions in their natural language
+        - Include a variety of question types
+        - More questions = better topic discovery
+        
+        **❌ Avoid:**
+        - Very short phrases (less than 3 words)
+        - Questions with lots of typos
+        - Mixed languages in the same file
+        """)
     
     uploaded_file = st.file_uploader(
         "Choose a text file with questions",
         type=['txt'],
-        help="Upload a .txt file with one question per line",
+        help="Upload a .txt file with one question per line - the AI will find patterns and group similar questions together",
         key="main_file_uploader"
     )
     
@@ -203,21 +246,28 @@ def upload_and_analyze_tab():
         is_valid, questions, message = validate_questions_file(content)
         
         if is_valid:
-            st.success(message)
+            st.success(f"✅ {message}")
+            
+            # File stats
+            st.markdown(f"**📊 File Stats:** {len(questions)} questions ready for analysis")
             
             # File preview
-            with st.expander("📖 Preview first 5 questions"):
+            with st.expander("� Preview Questions (First 5)", expanded=False):
                 for i, q in enumerate(questions[:5], 1):
-                    st.write(f"{i}. {q}")
+                    st.markdown(f"**{i}.** {q}")
+                if len(questions) > 5:
+                    st.caption(f"... and {len(questions) - 5} more questions")
             
-            # Analysis button and controls - push "Need more control" to the right
+            # Analysis button and controls
+            st.divider()
             col1, col2, col3 = st.columns([2, 1, 2])
             
             with col1:
+                st.markdown("**🚀 Ready to analyze?**")
                 analyze_button = st.button(
-                    "🚀 Run Analysis",
+                    "▶️ Start Topic Analysis",
                     type="primary",
-                    help="Start the topic modeling analysis"
+                    help="Start the AI topic modeling analysis - this will take 1-3 minutes depending on the number of questions"
                 )
             
             with col3:

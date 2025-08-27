@@ -13,7 +13,12 @@ from typing import Optional
 
 def display_interactive_scatter(df: pd.DataFrame, topic_model: Optional[BERTopic] = None, embeddings: Optional[np.ndarray] = None):
     """Display interactive scatter plot of questions"""
-    st.subheader("🎯 Question Distribution by Topic")
+    from components import create_chart_header
+    
+    create_chart_header(
+        "🎯 Question Distribution by Topic", 
+        "This is like a map of all your questions! Each dot represents one question. Questions that are about similar topics are placed closer together. It's like sorting your clothes - all the shirts go in one pile, all the pants in another. Hover over any dot to read the actual question and see how confident the AI is about its topic!"
+    )
     
     if topic_model is not None and embeddings is not None:
         try:
@@ -59,7 +64,16 @@ def display_interactive_scatter(df: pd.DataFrame, topic_model: Optional[BERTopic
             )
             
             st.plotly_chart(fig, use_container_width=True, key="scatter_plot_interactive")
-            st.info("💡 **Tip:** Hover over points to see individual questions! Points closer together represent similar questions.")
+            
+            # Enhanced teen-friendly tip
+            st.success("🎮 **Pro Tip:** This chart is interactive! You can:")
+            st.markdown("""
+            - **🖱️ Hover** over any dot to see the full question
+            - **🔍 Zoom** in/out with your mouse wheel  
+            - **👆 Pan** by clicking and dragging
+            - **📍 Focus** on specific topic colors in the legend
+            - **🎯 Look for clusters** - dots close together = similar questions!
+            """)
             return
                 
         except Exception as e:
@@ -71,6 +85,13 @@ def display_interactive_scatter(df: pd.DataFrame, topic_model: Optional[BERTopic
 
 def display_topic_distribution_chart(df: pd.DataFrame, chart_key: str = "topic_distribution_bar"):
     """Display topic distribution bar chart with unique key"""
+    from components import create_chart_header
+    
+    create_chart_header(
+        "📊 Questions Per Topic", 
+        "This bar chart shows how many questions belong to each topic - like counting how many people are in different clubs at school. The taller the bar, the more questions we found about that topic. This helps you see which topics students ask about most!"
+    )
+    
     topic_counts = df.groupby('Topic_Name').size().reset_index(name='Count')
     topic_counts = topic_counts.sort_values('Count', ascending=False)
     
@@ -89,11 +110,18 @@ def display_topic_distribution_chart(df: pd.DataFrame, chart_key: str = "topic_d
         showlegend=False
     )
     st.plotly_chart(fig, use_container_width=True, key=chart_key)
+    
+    st.info("🔍 **Quick Insight:** The leftmost (tallest) bars show the most common question topics. The rightmost (shortest) bars are rare topics that only a few students ask about.")
 
 
 def display_topic_hierarchy(topic_model: BERTopic):
     """Display topic hierarchy visualization"""
-    st.subheader("🌳 Topic Hierarchy & Clustering")
+    from components import create_chart_header
+    
+    create_chart_header(
+        "🌳 Topic Hierarchy & Clustering", 
+        "Think of this like a family tree, but for topics! This chart shows how different topics are related to each other. Topics that branch together are more similar - like how 'dogs' and 'cats' might branch together under 'pets'. The height shows how different topics are from each other."
+    )
     
     try:
         # Hierarchical clustering visualization
@@ -101,7 +129,7 @@ def display_topic_hierarchy(topic_model: BERTopic):
         fig_hier.update_layout(height=700)
         st.plotly_chart(fig_hier, use_container_width=True, key="topic_hierarchy")
         
-        st.info("💡 **Tip:** This dendrogram shows how topics relate hierarchically. Similar topics cluster together.")
+        st.success("🌟 **How to read this:** Each line represents a topic. Topics that join together lower on the tree are more similar. The higher up they join, the more different they are!")
         
     except Exception as e:
         st.error(f"Could not create hierarchy visualization: {str(e)}")
@@ -109,9 +137,15 @@ def display_topic_hierarchy(topic_model: BERTopic):
 
 def display_topic_similarity_heatmap(topic_model: BERTopic):
     """Display topic similarity heatmap"""
+    from components import create_chart_header
+    
+    create_chart_header(
+        "🔥 Topic Similarity Heatmap", 
+        "This is like a friendship map! Each square shows how similar two topics are to each other. Red squares mean 'very similar topics' (like best friends), while blue squares mean 'very different topics' (like strangers). Use this to spot topics that might be talking about the same thing!"
+    )
+    
     try:
         if hasattr(topic_model, 'topic_embeddings_') and topic_model.topic_embeddings_ is not None:
-            st.subheader("🔥 Topic Similarity Heatmap")
             
             # Calculate cosine similarity between topics
             topic_embeddings = topic_model.topic_embeddings_
@@ -140,7 +174,8 @@ def display_topic_similarity_heatmap(topic_model: BERTopic):
             )
             
             st.plotly_chart(fig_heatmap, use_container_width=True, key="topic_similarity_heatmap")
-            st.info("💡 **Tip:** Darker red indicates higher similarity between topics.")
+            
+            st.info("🎨 **Color Guide:** 🔴 Red = Very Similar | 🟡 Yellow = Somewhat Similar | 🔵 Blue = Very Different")
             
     except Exception as e:
         st.warning(f"Could not create similarity heatmap: {str(e)}")
@@ -148,7 +183,12 @@ def display_topic_similarity_heatmap(topic_model: BERTopic):
 
 def display_confidence_distribution(df: pd.DataFrame):
     """Display confidence/probability distribution"""
-    st.subheader("📊 Confidence Distribution")
+    from components import create_chart_header
+    
+    create_chart_header(
+        "📊 Confidence Distribution", 
+        "This shows how confident the AI is about its topic assignments! Think of it like test scores - higher numbers mean the AI is really sure about which topic a question belongs to. Lower scores mean the AI had to guess a bit. Most questions should have pretty high confidence scores if the analysis worked well!"
+    )
     
     # Histogram of confidence scores
     fig_hist = px.histogram(
@@ -162,7 +202,17 @@ def display_confidence_distribution(df: pd.DataFrame):
     fig_hist.update_layout(height=400)
     st.plotly_chart(fig_hist, use_container_width=True, key="confidence_histogram")
     
+    st.markdown("**📈 What the shape tells us:**")
+    st.markdown("- **Peak on the right?** = AI is confident about most topics ✅")
+    st.markdown("- **Peak on the left?** = AI struggled with many topics ⚠️") 
+    st.markdown("- **Spread out evenly?** = Mixed results - some clear, some unclear 🤔")
+    
     # Box plot by topic
+    create_chart_header(
+        "📦 Confidence by Topic", 
+        "Box plots show the range of confidence scores for each topic. The middle line is the average, the box shows where most scores fall, and the whiskers show the full range. Topics with tight boxes have consistent confidence - topics with wide boxes vary a lot!"
+    )
+    
     fig_box = px.box(
         df[df['Topic_ID'] != -1], 
         x='Topic_Name', 
@@ -175,11 +225,18 @@ def display_confidence_distribution(df: pd.DataFrame):
         height=500
     )
     st.plotly_chart(fig_box, use_container_width=True, key="confidence_box_plot")
+    
+    st.success("🎯 **Reading Box Plots:** Higher boxes = more confident topics | Skinnier boxes = more consistent confidence | Dots outside boxes = unusual scores")
 
 
 def display_topic_words_chart(topic_model: BERTopic):
     """Display top words for each topic"""
-    st.subheader("🔤 Top Words by Topic")
+    from components import create_chart_header
+    
+    create_chart_header(
+        "🔤 Top Words by Topic", 
+        "These are the most important words that define each topic! Think of them as hashtags or keywords - they tell you what each topic is really about. Longer bars mean more important words for that topic. If you see weird words, the AI might need better training!"
+    )
     
     try:
         topic_info = topic_model.get_topic_info()
@@ -217,6 +274,8 @@ def display_topic_words_chart(topic_model: BERTopic):
             )
             
             st.plotly_chart(fig, use_container_width=True, key="topic_words_chart")
+            
+            st.info("🔍 **Pro Tip:** Look for words that make sense together! If you see random words mixed together, that topic might need to be split into smaller, more focused topics.")
             
     except Exception as e:
         st.warning(f"Could not create topic words chart: {str(e)}")
