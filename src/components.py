@@ -246,13 +246,13 @@ def upload_and_analyze_tab():
         is_valid, questions, message = validate_questions_file(content)
         
         if is_valid:
-            st.success(f"✅ {message}")
+            st.success(message)
             
             # File stats
             st.markdown(f"**📊 File Stats:** {len(questions)} questions ready for analysis")
             
             # File preview
-            with st.expander("� Preview Questions (First 5)", expanded=False):
+            with st.expander("👀 Preview Questions (First 5)", expanded=False):
                 for i, q in enumerate(questions[:5], 1):
                     st.markdown(f"**{i}.** {q}")
                 if len(questions) > 5:
@@ -265,7 +265,7 @@ def upload_and_analyze_tab():
             with col1:
                 st.markdown("**🚀 Ready to analyze?**")
                 analyze_button = st.button(
-                    "▶️ Start Topic Analysis",
+                    "▶ Run Analysis",
                     type="primary",
                     help="Start the AI topic modeling analysis - this will take 1-3 minutes depending on the number of questions"
                 )

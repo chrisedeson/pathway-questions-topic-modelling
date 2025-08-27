@@ -178,37 +178,117 @@ def create_enhanced_metrics_tab(df: pd.DataFrame, topic_model: Optional[BERTopic
         - Shows if the AI is using the best settings for your data
         """)
     
-    indicator_col1, indicator_col2, indicator_col3 = st.columns(3)
+    # Create a clean table format for quality indicators
+    categorization_quality = "🟢 Excellent" if categorized_percentage > 80 else "🟡 Good" if categorized_percentage > 60 else "🔴 Needs Improvement"
+    cluster_balance = "🟢 Well Balanced" if unique_clusters >= 10 and unique_clusters <= 50 else "🟡 Moderate" if unique_clusters >= 5 else "🔴 Too Few Clusters"
+    min_cluster_quality = "🟢 Optimized" if unique_clusters > 0 else "🔴 No Clusters"
     
-    with indicator_col1:
-        categorization_quality = "🟢 Excellent" if categorized_percentage > 80 else "🟡 Good" if categorized_percentage > 60 else "🔴 Needs Improvement"
-        st.markdown(f"""
-        **Categorization Quality:** {categorization_quality}
+    # Create quality indicators dataframe for clean display
+    quality_data = {
+        "Quality Metric": [
+            "🎯 Categorization Quality",
+            "⚖️ Cluster Distribution", 
+            "⚙️ Configuration Status"
+        ],
+        "Status": [
+            categorization_quality,
+            cluster_balance,
+            min_cluster_quality
+        ],
+        "Details": [
+            f"{categorized_percentage:.1f}% categorized • {unique_clusters} topics discovered",
+            f"{unique_clusters} clusters • Avg {total_questions / max(unique_clusters, 1):.1f} questions/cluster",
+            "Min cluster: 15 • Latest OpenAI models • Enhanced labeling"
+        ]
+    }
+    
+    quality_df = pd.DataFrame(quality_data)
+    
+    # Display as a clean table
+    st.dataframe(
+        quality_df,
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            "Quality Metric": st.column_config.TextColumn("Quality Metric", width=180),
+            "Status": st.column_config.TextColumn("Status", width=150),
+            "Details": st.column_config.TextColumn("Details", width=350)
+        }
+    )
+    
+    # Configuration details table
+    st.markdown("### ⚙️ Technical Configuration")
+    
+    # Add explanation for configuration
+    with st.expander("❔ What do these technical settings mean?"):
+        st.markdown("""
+        **🤖 AI Models:** The specific OpenAI models used for understanding and generating text
+        - **Embedding Model:** Converts questions into numbers the AI can understand
+        - **Chat Model:** Generates the topic names and descriptions you see
         
-        • {categorized_percentage:.1f}% of questions categorized
-        • {unique_clusters} distinct topics discovered
-        • Suitable for analysis and insights
+        **🎯 Clustering Settings:** How the AI groups similar questions together
+        - **Min Cluster Size:** Minimum questions needed to form a topic group
+        - **UMAP Neighbors:** How many nearby questions to consider when grouping
+        - **Dimensions:** How many aspects the AI considers when comparing questions
+        
+        **📊 Other Settings:** Additional technical parameters that affect the analysis
         """)
     
-    with indicator_col2:
-        cluster_balance = "🟢 Well Balanced" if unique_clusters >= 10 and unique_clusters <= 50 else "🟡 Moderate" if unique_clusters >= 5 else "🔴 Too Few Clusters"
-        st.markdown(f"""
-        **Cluster Distribution:** {cluster_balance}
-        
-        • {unique_clusters} clusters for {total_questions} questions
-        • Avg {total_questions / max(unique_clusters, 1):.1f} questions per cluster
-        • Good granularity for review
-        """)
+    # Import config values
+    from config import EMBEDDING_MODEL, CHAT_MODEL, MIN_CLUSTER_SIZE, UMAP_N_NEIGHBORS, UMAP_N_COMPONENTS, MAX_FEATURES
     
-    with indicator_col3:
-        min_cluster_quality = "🟢 Optimized" if unique_clusters > 0 else "🔴 No Clusters"
-        st.markdown(f"""
-        **Configuration Status:** {min_cluster_quality}
-        
-        • Min cluster size set to 15 ✅
-        • Using latest OpenAI models ✅
-        • Enhanced topic labeling ✅
-        """)
+    # Get embeddings shape information if available
+    if embeddings is not None and hasattr(embeddings, 'shape'):
+        embeddings_shape = f"{embeddings.shape[0]} questions × {embeddings.shape[1]} dimensions"
+    elif embeddings is not None and isinstance(embeddings, dict):
+        embeddings_shape = f"Dictionary with {len(embeddings)} entries"
+    else:
+        embeddings_shape = "Not available"
+    
+    # Create configuration table
+    config_data = {
+        "Configuration": [
+            "🤖 OpenAI Embedding Model",
+            "🤖 OpenAI Chat Model", 
+            "🎯 Min Cluster Size",
+            "🗺️ UMAP Neighbors",
+            "📐 UMAP Dimensions",
+            "📊 Max Features",
+            "🧮 Embeddings Shape"
+        ],
+        "Value": [
+            EMBEDDING_MODEL,
+            CHAT_MODEL,
+            str(MIN_CLUSTER_SIZE),
+            str(UMAP_N_NEIGHBORS), 
+            str(UMAP_N_COMPONENTS),
+            str(MAX_FEATURES),
+            embeddings_shape
+        ],
+        "Description": [
+            "AI model that converts text to numbers",
+            "AI model that generates topic names",
+            "Minimum questions needed per topic",
+            "How many nearby questions to consider",
+            "Number of dimensions for clustering",
+            "Maximum vocabulary size for analysis",
+            "Size of the numerical representation"
+        ]
+    }
+    
+    config_df = pd.DataFrame(config_data)
+    
+    # Display configuration table
+    st.dataframe(
+        config_df,
+        hide_index=True,
+        use_container_width=True,
+        column_config={
+            "Configuration": st.column_config.TextColumn("Configuration", width=200),
+            "Value": st.column_config.TextColumn("Value", width=150),
+            "Description": st.column_config.TextColumn("Description", width=300)
+        }
+    )
     
     # Download section for Elder Edwards review format
     st.divider()
@@ -232,7 +312,7 @@ def create_enhanced_metrics_tab(df: pd.DataFrame, topic_model: Optional[BERTopic
         )
     
     with download_col2:
-        st.markdown("**📝 Clean Review Format**")
+        st.markdown("**📝 Elder Edwards Clean Review Format**")
         st.caption("Simplified format for easy reading and review")
         # Create the exact format requested: representation and question columns, sorted
         review_df = df[['Topic_Name', 'Question']].copy()
