@@ -15,7 +15,7 @@ EMBEDDING_MODEL = os.getenv('OPENAI_EMBEDDING_MODEL', "text-embedding-3-large")
 CHAT_MODEL = os.getenv('OPENAI_CHAT_MODEL', "gpt-4o-mini")
 
 # Clustering Configuration
-MIN_CLUSTER_SIZE = 15  # Updated from 5 to 15 as requested
+MIN_CLUSTER_SIZE = 15
 UMAP_N_NEIGHBORS = 15
 UMAP_N_COMPONENTS = 5
 UMAP_METRIC = 'cosine'

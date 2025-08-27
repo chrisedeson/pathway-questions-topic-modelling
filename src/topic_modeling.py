@@ -65,7 +65,7 @@ def perform_clustering(embeddings: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     
     # HDBSCAN clustering with updated min_cluster_size
     hdbscan_model = HDBSCAN(
-        min_cluster_size=MIN_CLUSTER_SIZE,  # Updated to 15 as requested
+        min_cluster_size=MIN_CLUSTER_SIZE,
         metric=HDBSCAN_METRIC, 
         cluster_selection_method=HDBSCAN_CLUSTER_SELECTION_METHOD
     )

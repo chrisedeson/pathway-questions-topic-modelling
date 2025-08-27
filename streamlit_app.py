@@ -71,7 +71,7 @@ def main():
         ])
         
         with tab1:
-            # Enhanced metrics tab as requested - now first tab
+            # Enhanced metrics tab
             create_enhanced_metrics_tab(
                 st.session_state.current_results,
                 st.session_state.get('current_topic_model'),

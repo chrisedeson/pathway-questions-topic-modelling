@@ -1,5 +1,5 @@
 """
-Enhanced Metrics Tab - A beautiful comprehensive analysis tab as requested in tasks.md
+Enhanced Metrics Tab - comprehensive analysis tab
 """
 import streamlit as st
 import pandas as pd
@@ -12,7 +12,7 @@ from bertopic import BERTopic
 
 def create_enhanced_metrics_tab(df: pd.DataFrame, topic_model: Optional[BERTopic] = None, embeddings: Optional[np.ndarray] = None):
     """
-    Create a comprehensive and beautiful metrics tab as requested in tasks.md
+    Create a comprehensive and metrics tab
     This tab includes all the specific metrics mentioned:
     - Number of clusters found: X
     - Number of questions clustered: Y  
@@ -25,7 +25,7 @@ def create_enhanced_metrics_tab(df: pd.DataFrame, topic_model: Optional[BERTopic
     st.header("🎯 Comprehensive Analysis Dashboard")
     st.markdown("*Complete clustering results, metrics, and configuration details*")
     
-    # Calculate all metrics as specified in tasks
+    # Calculate all metrics
     total_questions = len(df)
     clustered_questions = len(df[df['Topic_ID'] != -1])
     unclustered_questions = len(df[df['Topic_ID'] == -1])
@@ -290,7 +290,7 @@ def create_enhanced_metrics_tab(df: pd.DataFrame, topic_model: Optional[BERTopic
         }
     )
     
-    # Download section for Elder Edwards review format
+    # Download section for review format
     st.divider()
     st.subheader("📥 Download for Review")
     
@@ -314,10 +314,10 @@ def create_enhanced_metrics_tab(df: pd.DataFrame, topic_model: Optional[BERTopic
     with download_col2:
         st.markdown("**📝 Elder Edwards Clean Review Format**")
         st.caption("Simplified format for easy reading and review")
-        # Create the exact format requested: representation and question columns, sorted
+        # Create the exact format: representation and question columns, sorted
         review_df = df[['Topic_Name', 'Question']].copy()
         review_df = review_df.rename(columns={'Topic_Name': 'representation'})
-        # Sort by representation (topic) and then by question alphabetically as specified
+        # Sort by representation (topic) and then by question alphabetically
         review_df = review_df.sort_values(['representation', 'Question'])
         
         csv_review = review_df.to_csv(index=False)

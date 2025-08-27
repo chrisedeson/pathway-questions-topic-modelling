@@ -61,7 +61,7 @@ def save_results(df: pd.DataFrame, topic_model=None) -> str:
 def create_download_csv(df: pd.DataFrame, include_representation: bool = False) -> str:
     """Create CSV for download with specified columns"""
     if include_representation:
-        # Create the format requested in tasks - representation and question columns
+        # Create the format - representation and question columns
         download_df = df[['Topic_Name', 'Question']].copy()
         download_df = download_df.rename(columns={'Topic_Name': 'representation'})
         # Sort by representation (topic) and then by question alphabetically
@@ -73,7 +73,10 @@ def create_download_csv(df: pd.DataFrame, include_representation: bool = False) 
 
 
 def calculate_clustering_metrics(df: pd.DataFrame, embeddings: Optional[np.ndarray] = None) -> dict:
-    """Calculate detailed clustering metrics as specified in tasks"""
+    """Calculate detailed clustering metrics"""
+    # Import config to avoid hardcoding
+    from config import MIN_CLUSTER_SIZE
+    
     total_questions = len(df)
     clustered_questions = len(df[df['Topic_ID'] != -1])
     unclustered_questions = len(df[df['Topic_ID'] == -1])
@@ -92,7 +95,7 @@ def calculate_clustering_metrics(df: pd.DataFrame, embeddings: Optional[np.ndarr
         'noise_points': noise_points,
         'noise_percentage': noise_percentage,
         'categorized_percentage': categorized_percentage,
-        'min_cluster_size': 15  # As requested in tasks
+        'min_cluster_size': MIN_CLUSTER_SIZE  # Use actual config value
     }
     
     # Add embeddings shape if available
@@ -103,7 +106,10 @@ def calculate_clustering_metrics(df: pd.DataFrame, embeddings: Optional[np.ndarr
 
 
 def format_metrics_display(metrics: dict) -> str:
-    """Format metrics for display as specified in the tasks"""
+    """Format metrics for display"""
+    # Import config values to avoid hardcoding
+    from config import EMBEDDING_MODEL, CHAT_MODEL, MIN_CLUSTER_SIZE
+    
     display_text = f"""
 **Clustering Results:**
 • Number of clusters found: {metrics['clusters_found']}
@@ -112,11 +118,11 @@ def format_metrics_display(metrics: dict) -> str:
 • Clusters found: {metrics['clusters_found']}
 • Noise points: {metrics['noise_points']} ({metrics['noise_percentage']:.1f}%)
 • Questions categorized: {metrics['categorized_percentage']:.1f}%
-• Min Cluster Size: {metrics['min_cluster_size']}
+• Min Cluster Size: {MIN_CLUSTER_SIZE}
 
 **Configuration:**
-• Embedding Model: text-embedding-3-large
-• Chat Model: gpt-4o-mini
+• Embedding Model: {EMBEDDING_MODEL}
+• Chat Model: {CHAT_MODEL}
 """
     
     if 'embeddings_shape' in metrics:

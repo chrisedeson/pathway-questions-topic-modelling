@@ -302,7 +302,7 @@ def display_visualization_tabs(df: pd.DataFrame, topic_model: Optional[BERTopic]
 
 
 def display_metrics_overview(metrics: dict):
-    """Display comprehensive metrics as requested in tasks"""
+    """Display comprehensive metrics"""
     st.subheader("📈 Comprehensive Analysis Metrics")
     
     # Main metrics in columns
@@ -352,7 +352,7 @@ def display_metrics_overview(metrics: dict):
 
 
 def create_download_section(df: pd.DataFrame):
-    """Create download section with requested CSV format"""
+    """Create download section in CSV format"""
     st.subheader("💾 Download Results")
     
     col1, col2 = st.columns(2)
@@ -370,10 +370,10 @@ def create_download_section(df: pd.DataFrame):
     
     with col2:
         st.markdown("**📝 Elder Edwards Review Format**")
-        # Create the specific format requested in tasks: representation and question columns
+        # Create the specific format: representation and question columns
         review_df = df[['Topic_Name', 'Question']].copy()
         review_df = review_df.rename(columns={'Topic_Name': 'representation'})
-        # Sort by representation and then by question alphabetically as requested
+        # Sort by representation and then by question alphabetically
         review_df = review_df.sort_values(['representation', 'Question'])
         
         csv_review = review_df.to_csv(index=False)

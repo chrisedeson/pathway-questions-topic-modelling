@@ -219,8 +219,7 @@ def upload_and_analyze_tab():
         - At least 50+ questions (more is better!)
         - Questions should be clear and complete
         
-        **✨ Tips for best results:**
-        - Remove duplicates beforehand 
+        **✨ Tips for best results:** 
         - Keep questions in their natural language
         - Include a variety of question types
         - More questions = better topic discovery
@@ -267,7 +266,7 @@ def upload_and_analyze_tab():
                 analyze_button = st.button(
                     "▶ Run Analysis",
                     type="primary",
-                    help="Start the AI topic modeling analysis - this will take 1-3 minutes depending on the number of questions"
+                    help="Start the AI topic modeling analysis - this will take 3-5 minutes depending on the number of questions"
                 )
             
             with col3:
