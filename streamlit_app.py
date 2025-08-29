@@ -42,6 +42,96 @@ def configure_page():
     
     # Apply custom CSS
     st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+    
+    # Add dynamic theme detection and selectbox styling
+    st.markdown("""
+    <script>
+    function fixSelectboxTheme() {
+        // Wait for elements to load
+        setTimeout(() => {
+            // Detect if we're in dark mode by checking background color
+            const app = window.parent.document.querySelector('.stApp');
+            const computedStyle = getComputedStyle(app);
+            const bgColor = computedStyle.backgroundColor;
+            const isDark = bgColor.includes('14, 17, 23') || bgColor.includes('11, 13, 18');
+            
+            // Apply theme-specific styles to all selectboxes
+            const selectboxes = window.parent.document.querySelectorAll('.stSelectbox');
+            selectboxes.forEach(selectbox => {
+                const selectElements = selectbox.querySelectorAll('div, span, *');
+                selectElements.forEach(element => {
+                    if (isDark) {
+                        element.style.color = '#fafafa !important';
+                        element.style.setProperty('color', '#fafafa', 'important');
+                    } else {
+                        element.style.color = '#262730 !important';
+                        element.style.setProperty('color', '#262730', 'important');
+                    }
+                });
+                
+                // Fix select container backgrounds
+                const selectContainers = selectbox.querySelectorAll('div[data-baseweb="select"] > div');
+                selectContainers.forEach(container => {
+                    if (isDark) {
+                        container.style.backgroundColor = '#262730 !important';
+                        container.style.borderColor = '#30363d !important';
+                    } else {
+                        container.style.backgroundColor = 'white !important';
+                        container.style.borderColor = '#d1d5db !important';
+                    }
+                });
+            });
+        }, 100);
+    }
+    
+    // Run the fix immediately and on theme changes
+    fixSelectboxTheme();
+    
+    // Re-run when DOM changes (theme switching)
+    const observer = new MutationObserver(fixSelectboxTheme);
+    observer.observe(window.parent.document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['class', 'style']
+    });
+    
+    // Also run on window resize/focus events
+    window.parent.addEventListener('focus', fixSelectboxTheme);
+    window.parent.addEventListener('resize', fixSelectboxTheme);
+    </script>
+    
+    <style>
+    /* Backup CSS for selectbox visibility */
+    .stSelectbox div[data-baseweb="select"] * {
+        color: inherit !important;
+        opacity: 1 !important;
+    }
+    
+    /* Ensure selectbox text contrasts are readable */
+    @media (prefers-color-scheme: dark) {
+        .stSelectbox * {
+            color: #fafafa !important;
+        }
+        .stSelectbox > div > div,
+        .stSelectbox div[data-baseweb="select"] > div {
+            background-color: #262730 !important;
+            border-color: #30363d !important;
+        }
+    }
+    
+    @media (prefers-color-scheme: light) {
+        .stSelectbox * {
+            color: #262730 !important;
+        }
+        .stSelectbox > div > div,
+        .stSelectbox div[data-baseweb="select"] > div {
+            background-color: white !important;
+            border-color: #d1d5db !important;
+        }
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
 
 def main():

@@ -10,6 +10,61 @@ import numpy as np
 from bertopic import BERTopic
 
 
+@st.cache_data
+def calculate_metrics_summary(df: pd.DataFrame):
+    """Cache expensive metrics calculations"""
+    total_questions = len(df)
+    clustered_questions = len(df[df['Topic_ID'] != -1])
+    unclustered_questions = len(df[df['Topic_ID'] == -1])
+    unique_clusters = len(df[df['Topic_ID'] != -1]['Topic_ID'].unique())
+    noise_percentage = (unclustered_questions / total_questions) * 100
+    categorized_percentage = (clustered_questions / total_questions) * 100
+    
+    return {
+        'total_questions': total_questions,
+        'clustered_questions': clustered_questions,
+        'unclustered_questions': unclustered_questions,
+        'unique_clusters': unique_clusters,
+        'noise_percentage': noise_percentage,
+        'categorized_percentage': categorized_percentage
+    }
+
+
+@st.cache_data  
+def get_top_topics_data(df: pd.DataFrame, top_n: int = 10):
+    """Cache top topics calculation"""
+    topic_counts = df[df['Topic_ID'] != -1].groupby('Topic_Name').size().reset_index(name='Count')
+    return topic_counts.sort_values('Count', ascending=False).head(top_n)
+
+
+@st.cache_data
+def create_quality_indicators_table(total_questions: int, categorized_percentage: float, unique_clusters: int):
+    """Cache quality indicators table creation"""
+    categorization_quality = "🟢 Excellent" if categorized_percentage > 80 else "🟡 Good" if categorized_percentage > 60 else "🔴 Needs Improvement"
+    cluster_balance = "🟢 Well Balanced" if unique_clusters >= 10 and unique_clusters <= 50 else "🟡 Moderate" if unique_clusters >= 5 else "🔴 Too Few Clusters"
+    min_cluster_quality = "🟢 Optimized" if unique_clusters > 0 else "🔴 No Clusters"
+    
+    quality_data = {
+        "Quality Metric": [
+            "🎯 Categorization Quality",
+            "⚖️ Cluster Distribution", 
+            "⚙️ Configuration Status"
+        ],
+        "Status": [
+            categorization_quality,
+            cluster_balance,
+            min_cluster_quality
+        ],
+        "Details": [
+            f"{categorized_percentage:.1f}% categorized • {unique_clusters} topics discovered",
+            f"{unique_clusters} clusters • Avg {total_questions / max(unique_clusters, 1):.1f} questions/cluster",
+            "Min cluster: 15 • Latest OpenAI models • Enhanced labeling"
+        ]
+    }
+    
+    return pd.DataFrame(quality_data)
+
+
 def create_enhanced_metrics_tab(df: pd.DataFrame, topic_model: Optional[BERTopic] = None, embeddings: Optional[np.ndarray] = None):
     """
     Create a comprehensive and metrics tab
@@ -25,14 +80,14 @@ def create_enhanced_metrics_tab(df: pd.DataFrame, topic_model: Optional[BERTopic
     st.header("🎯 Comprehensive Analysis Dashboard")
     st.markdown("*Complete clustering results, metrics, and configuration details*")
     
-    # Calculate all metrics
-    total_questions = len(df)
-    clustered_questions = len(df[df['Topic_ID'] != -1])
-    unclustered_questions = len(df[df['Topic_ID'] == -1])
-    unique_clusters = len(df[df['Topic_ID'] != -1]['Topic_ID'].unique())
-    noise_points = unclustered_questions
-    noise_percentage = (noise_points / total_questions) * 100
-    categorized_percentage = (clustered_questions / total_questions) * 100
+    # Calculate all metrics using cached function
+    metrics = calculate_metrics_summary(df)
+    total_questions = metrics['total_questions']
+    clustered_questions = metrics['clustered_questions'] 
+    unclustered_questions = metrics['unclustered_questions']
+    unique_clusters = metrics['unique_clusters']
+    noise_percentage = metrics['noise_percentage']
+    categorized_percentage = metrics['categorized_percentage']
     
     # Hero metrics section
     st.subheader("📊 Key Metrics Overview")
@@ -123,9 +178,8 @@ def create_enhanced_metrics_tab(df: pd.DataFrame, topic_model: Optional[BERTopic
     
     with viz_col2:
         st.markdown("**📊 Top 10 Most Common Topics**")
-        # Top topics bar chart
-        topic_counts = df[df['Topic_ID'] != -1].groupby('Topic_Name').size().reset_index(name='Count')
-        topic_counts = topic_counts.sort_values('Count', ascending=False).head(10)
+        # Top topics bar chart using cached data
+        topic_counts = get_top_topics_data(df, top_n=10)
         
         fig_bar = px.bar(
             topic_counts,
@@ -178,31 +232,8 @@ def create_enhanced_metrics_tab(df: pd.DataFrame, topic_model: Optional[BERTopic
         - Shows if the AI is using the best settings for your data
         """)
     
-    # Create a clean table format for quality indicators
-    categorization_quality = "🟢 Excellent" if categorized_percentage > 80 else "🟡 Good" if categorized_percentage > 60 else "🔴 Needs Improvement"
-    cluster_balance = "🟢 Well Balanced" if unique_clusters >= 10 and unique_clusters <= 50 else "🟡 Moderate" if unique_clusters >= 5 else "🔴 Too Few Clusters"
-    min_cluster_quality = "🟢 Optimized" if unique_clusters > 0 else "🔴 No Clusters"
-    
-    # Create quality indicators dataframe for clean display
-    quality_data = {
-        "Quality Metric": [
-            "🎯 Categorization Quality",
-            "⚖️ Cluster Distribution", 
-            "⚙️ Configuration Status"
-        ],
-        "Status": [
-            categorization_quality,
-            cluster_balance,
-            min_cluster_quality
-        ],
-        "Details": [
-            f"{categorized_percentage:.1f}% categorized • {unique_clusters} topics discovered",
-            f"{unique_clusters} clusters • Avg {total_questions / max(unique_clusters, 1):.1f} questions/cluster",
-            "Min cluster: 15 • Latest OpenAI models • Enhanced labeling"
-        ]
-    }
-    
-    quality_df = pd.DataFrame(quality_data)
+    # Create a clean table format for quality indicators using cached function
+    quality_df = create_quality_indicators_table(total_questions, categorized_percentage, unique_clusters)
     
     # Display as a clean table
     st.dataframe(

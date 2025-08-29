@@ -65,35 +65,78 @@ CUSTOM_CSS = """
         margin-bottom: 1rem;
     }
     
-    /* Fix select dropdown styling */
-    .stSelectbox > div > div {
-        background-color: white !important;
-        color: #262730 !important;
-    }
+    /* Enhanced selectbox styling for both themes with simplified approach */
     
-    .stSelectbox > div > div > div {
-        background-color: white !important;
-        color: #262730 !important;
-    }
-    
+    /* Force selectbox text to be visible in all cases */
     .stSelectbox label {
-        color: #262730 !important;
+        color: var(--text-color, #262730) !important;
     }
     
-    /* Fix select dropdown options */
-    .stSelectbox div[data-baseweb="select"] > div {
-        background-color: white !important;
-        color: #262730 !important;
+    /* Main selectbox container */
+    .stSelectbox > div > div,
+    .stSelectbox div[data-baseweb="select"] > div,
+    .stSelectbox div[data-baseweb="select"] {
+        background-color: var(--background-color, white) !important;
+        color: var(--text-color, #262730) !important;
+        border: 1px solid var(--border-color, #d1d5db) !important;
     }
     
-    /* Ensure dropdown text is visible */
-    .stSelectbox div[data-baseweb="select"] div {
-        color: #262730 !important;
+    /* All text inside selectbox */
+    .stSelectbox div[data-baseweb="select"] *,
+    .stSelectbox div[data-baseweb="select"] div,
+    .stSelectbox div[data-baseweb="select"] span {
+        color: var(--text-color, #262730) !important;
+        opacity: 1 !important;
+    }
+    
+    /* Dropdown options */
+    .stSelectbox div[role="listbox"] {
+        background-color: var(--background-color, white) !important;
+        border: 1px solid var(--border-color, #d1d5db) !important;
     }
     
     .stSelectbox div[role="option"] {
-        background-color: white !important;
-        color: #262730 !important;
+        background-color: var(--background-color, white) !important;
+        color: var(--text-color, #262730) !important;
+    }
+    
+    .stSelectbox div[role="option"]:hover {
+        background-color: var(--secondary-background-color, #f8f9fa) !important;
+        color: var(--text-color, #262730) !important;
+    }
+    
+    /* Nuclear option - force ALL selectbox text to be visible */
+    .stSelectbox * {
+        color: var(--text-color, #262730) !important;
+        opacity: 1 !important;
+    }
+    
+    /* Specifically target the selected value display */
+    .stSelectbox [data-baseweb="select"] [data-testid] {
+        color: var(--text-color, #262730) !important;
+    }
+    
+    /* Override any inherited dark styles */
+    [data-theme="dark"] .stSelectbox *,
+    .stApp[data-testid="stApp"] .stSelectbox * {
+        color: #fafafa !important;
+    }
+    
+    [data-theme="dark"] .stSelectbox > div > div,
+    [data-theme="dark"] .stSelectbox div[data-baseweb="select"] > div {
+        background-color: #262730 !important;
+        color: #fafafa !important;
+        border: 1px solid #30363d !important;
+    }
+    
+    [data-theme="dark"] .stSelectbox div[role="listbox"] {
+        background-color: #262730 !important;
+        border: 1px solid #30363d !important;
+    }
+    
+    [data-theme="dark"] .stSelectbox div[role="option"] {
+        background-color: #262730 !important;
+        color: #fafafa !important;
     }
 </style>
 """
