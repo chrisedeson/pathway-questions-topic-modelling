@@ -107,8 +107,19 @@ def display_question_explorer(df: pd.DataFrame):
     """Display question exploration interface"""
     st.header("🔍 Question Explorer")
     
-    # Add helpful explanation
+    # Add helpful explanation with performance note
     st.info("🎯 **Explore Your Questions:** Use the filters below to find specific questions, explore topics, or see how confident the AI was about different categorizations!")
+    
+    # Performance optimization notice
+    if len(df) > 500:
+        st.success("⚡ **Performance Optimized:** This explorer uses smart caching and table view for instant filtering and sorting, even with large datasets!")
+    
+    # Initialize session state for performance optimization
+    if 'question_explorer_state' not in st.session_state:
+        st.session_state.question_explorer_state = {
+            'last_filter_hash': None,
+            'cached_filtered_df': None
+        }
     
     # Filters
     col1, col2, col3 = st.columns(3)
@@ -117,35 +128,53 @@ def display_question_explorer(df: pd.DataFrame):
         selected_topics = st.multiselect(
             "Select Topics",
             options=sorted(df['Topic_Name'].unique()),
-            help="Filter questions by topic - choose one or more topics to focus on"
+            help="Filter questions by topic - choose one or more topics to focus on",
+            key="topics_multiselect"
         )
     
     with col2:
         min_confidence = st.slider(
             "Minimum Confidence",
             0.0, 1.0, 0.0, 0.1,
-            help="Filter by confidence score - higher values show questions the AI was more sure about"
+            help="Filter by confidence score - higher values show questions the AI was more sure about",
+            key="confidence_slider"
         )
     
     with col3:
         search_text = st.text_input(
             "Search in Questions",
-            help="Search for specific words or phrases within the question text"
+            help="Search for specific words or phrases within the question text",
+            key="search_input"
         )
     
-    # Apply filters
-    filtered_df = df.copy()
+    # Create filter hash to detect changes and cache expensive filtering operation
+    filter_state = f"{selected_topics}_{min_confidence}_{search_text}"
+    current_filter_hash = hash(filter_state)
     
-    if selected_topics:
-        filtered_df = filtered_df[filtered_df['Topic_Name'].isin(selected_topics)]
-    
-    if min_confidence > 0:
-        filtered_df = filtered_df[filtered_df['Probability'] >= min_confidence]
-    
-    if search_text:
-        filtered_df = filtered_df[
-            filtered_df['Question'].str.contains(search_text, case=False, na=False)
-        ]
+    # Only recompute filtering if filters actually changed
+    if (st.session_state.question_explorer_state['last_filter_hash'] != current_filter_hash or
+        st.session_state.question_explorer_state['cached_filtered_df'] is None):
+        
+        # Apply filters (expensive operation)
+        filtered_df = df.copy()
+        
+        if selected_topics:
+            filtered_df = filtered_df[filtered_df['Topic_Name'].isin(selected_topics)]
+        
+        if min_confidence > 0:
+            filtered_df = filtered_df[filtered_df['Probability'] >= min_confidence]
+        
+        if search_text:
+            filtered_df = filtered_df[
+                filtered_df['Question'].str.contains(search_text, case=False, na=False)
+            ]
+        
+        # Cache the result
+        st.session_state.question_explorer_state['last_filter_hash'] = current_filter_hash
+        st.session_state.question_explorer_state['cached_filtered_df'] = filtered_df
+    else:
+        # Use cached result - much faster!
+        filtered_df = st.session_state.question_explorer_state['cached_filtered_df']
     
     # Display results
     st.subheader(f"📋 Questions ({len(filtered_df)} found)")
@@ -166,42 +195,133 @@ def display_question_explorer(df: pd.DataFrame):
         **Higher confidence = Better topic assignment**
         """)
     
-    # Sort options
+    # Sort and pagination options with theme-friendly widgets
     sort_col1, sort_col2 = st.columns(2)
     
     with sort_col1:
         sort_by = st.selectbox(
             "Sort by",
             ['Topic_Name', 'Probability', 'Question'],
-            help="Choose how to sort the results - try sorting by confidence to see the most/least certain classifications"
+            help="Choose how to sort the results - try sorting by confidence to see the most/least certain classifications",
+            key="question_sort_by"
         )
     
     with sort_col2:
-        sort_order = st.selectbox(
+        # Use radio buttons for better theme compatibility
+        sort_order_radio = st.radio(
             "Order",
-            ['Ascending', 'Descending']
+            ['Ascending', 'Descending'],
+            key="question_sort_order_radio",
+            horizontal=True,
+            help="Choose sort direction"
         )
+        sort_order = sort_order_radio
     
-    # Apply sorting
+    # Apply sorting efficiently 
     ascending = sort_order == 'Ascending'
-    filtered_df = filtered_df.sort_values(sort_by, ascending=ascending)
+    sorted_df = filtered_df.sort_values(sort_by, ascending=ascending)
     
-    # Display questions
-    for idx, row in filtered_df.iterrows():
-        with st.container():
-            col1, col2 = st.columns([4, 1])
-            
-            with col1:
-                st.markdown(f"**{row['Question']}**")
-                st.caption(f"Topic: {row['Topic_Name']} | Confidence: {row['Probability']:.3f}")
-            
-            with col2:
-                confidence_color = "🟢" if row['Probability'] > 0.7 else "🟡" if row['Probability'] > 0.4 else "🔴"
-                st.markdown(f"{confidence_color} {row['Probability']:.3f}")
+    # Pagination for better performance
+    items_per_page = 50
+    total_pages = (len(sorted_df) + items_per_page - 1) // items_per_page
     
-    # Pagination for large results
-    if len(filtered_df) > 20:
-        st.info(f"Showing all {len(filtered_df)} results. Consider using filters to narrow down the view.")
+    if total_pages > 1:
+        page_col1, page_col2, page_col3 = st.columns([1, 2, 1])
+        with page_col2:
+            # Use number input for better theme compatibility
+            current_page = st.number_input(
+                f"Page (1-{total_pages}, showing {items_per_page} items per page)",
+                min_value=1,
+                max_value=total_pages,
+                value=1,
+                step=1,
+                key="question_page_number",
+                help=f"Navigate through {total_pages} pages of results"
+            )
+    else:
+        current_page = 1
+    
+    # Calculate start and end indices for current page
+    start_idx = (current_page - 1) * items_per_page
+    end_idx = min(start_idx + items_per_page, len(sorted_df))
+    page_df = sorted_df.iloc[start_idx:end_idx]
+    
+    # Display page info
+    if total_pages > 1:
+        st.info(f"📄 Showing questions {start_idx + 1}-{end_idx} of {len(sorted_df)} total results (Page {current_page} of {total_pages})")
+    
+    # Use container to reduce rerendering
+    display_container = st.container()
+    
+    with display_container:
+        # Display questions using st.dataframe for maximum performance 
+        use_table_view = st.toggle("📋 Use High-Performance Table View", 
+                                  value=True, 
+                                  help="Table view loads instantly and handles large datasets efficiently. Card view is prettier but slower.",
+                                  key="performance_table_toggle")
+        
+        if use_table_view:
+            # High-performance table view - prepare data efficiently
+            confidence_colors = []
+            for prob in page_df['Probability']:
+                if prob > 0.7:
+                    confidence_colors.append("🟢")
+                elif prob > 0.4:
+                    confidence_colors.append("🟡")
+                else:
+                    confidence_colors.append("🔴")
+            
+            # Create display dataframe efficiently using vectorized operations
+            display_df = pd.DataFrame({
+                'Question': page_df['Question'].values,
+                'Topic': page_df['Topic_Name'].values,
+                'Confidence': [f"{color} {prob:.3f}" for color, prob in zip(confidence_colors, page_df['Probability'])]
+            })
+            
+            # Display with optimized configuration
+            st.dataframe(
+                display_df,
+                column_config={
+                    "Question": st.column_config.TextColumn(
+                        "Question",
+                        help="The original question text",
+                        width="large"
+                    ),
+                    "Topic": st.column_config.TextColumn(
+                        "Topic", 
+                        help="AI-assigned topic category",
+                        width="medium"
+                    ),
+                    "Confidence": st.column_config.TextColumn(
+                        "Confidence",
+                        help="How confident the AI was about this topic assignment",
+                        width="small"
+                    )
+                },
+                use_container_width=True,
+                hide_index=True,
+                height=min(400, len(display_df) * 35 + 50)  # Dynamic height for better UX
+            )
+        else:
+            # Card view - prettier but slower, only for small datasets
+            if len(page_df) > 20:
+                st.warning("⚡ **Performance Notice:** Card view with many questions may be slow. Consider using Table View for better performance!")
+            
+            for _, row in page_df.iterrows():
+                with st.container():
+                    col1, col2 = st.columns([4, 1])
+                    
+                    with col1:
+                        st.markdown(f"**{row['Question']}**")
+                        st.caption(f"Topic: {row['Topic_Name']} | Confidence: {row['Probability']:.3f}")
+                    
+                    with col2:
+                        confidence_color = "🟢" if row['Probability'] > 0.7 else "🟡" if row['Probability'] > 0.4 else "🔴"
+                        st.markdown(f"{confidence_color} {row['Probability']:.3f}")
+    
+    # Show summary at bottom
+    if len(sorted_df) > items_per_page:
+        st.caption(f"💡 **Performance tip:** Table view is enabled by default for faster browsing!")
 
 
 def upload_and_analyze_tab():
