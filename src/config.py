@@ -28,6 +28,10 @@ UMAP_N_COMPONENTS = int(os.getenv('UMAP_N_COMPONENTS', "5"))
 UMAP_METRIC = 'cosine'
 HDBSCAN_METRIC = 'euclidean'
 HDBSCAN_CLUSTER_SELECTION_METHOD = 'eom'
+
+# Concurrent Processing Configuration
+MAX_CONCURRENT_REQUESTS = int(os.getenv('MAX_CONCURRENT_REQUESTS', "5"))  # OpenAI rate limit friendly
+ENABLE_ASYNC_PROCESSING = os.getenv('ENABLE_ASYNC_PROCESSING', "true").lower() == "true"
 RANDOM_SEED = int(os.getenv('RANDOM_SEED', "42"))
 
 # Caching Configuration

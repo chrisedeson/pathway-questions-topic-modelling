@@ -3,19 +3,21 @@ Topic modeling functionality for BYU Pathway Questions Analysis
 """
 import pandas as pd
 import numpy as np
-from openai import OpenAI
+from openai import OpenAI, AsyncOpenAI
 import umap.umap_ as umap
 from sklearn.feature_extraction.text import CountVectorizer
 from hdbscan import HDBSCAN
 from bertopic import BERTopic
 import streamlit as st
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Dict
 import time
+import asyncio
 
 from config import (
     OPENAI_API_KEY, EMBEDDING_MODEL, CHAT_MODEL, MIN_CLUSTER_SIZE,
     UMAP_N_NEIGHBORS, UMAP_N_COMPONENTS, UMAP_METRIC, HDBSCAN_METRIC,
-    HDBSCAN_CLUSTER_SELECTION_METHOD, MAX_FEATURES, STOP_WORDS
+    HDBSCAN_CLUSTER_SELECTION_METHOD, MAX_FEATURES, STOP_WORDS,
+    MAX_CONCURRENT_REQUESTS, ENABLE_ASYNC_PROCESSING
 )
 
 
@@ -110,17 +112,9 @@ def create_topic_model(questions: List[str], embeddings: np.ndarray) -> BERTopic
     return topic_model, topics, probs
 
 
-def enhance_topic_labels(topic_model: BERTopic, client: OpenAI) -> dict:
-    """Enhance topic labels using OpenAI"""
-    
-    topic_info = topic_model.get_topic_info()
-    enhanced_labels = {}
-    
-    for topic_id in topic_info['Topic'].unique():
-        if topic_id == -1:  # Skip noise
-            continue
-            
-        keywords = topic_model.get_topic(topic_id)[:10]
+async def generate_single_topic_label(async_client: AsyncOpenAI, topic_id: int, keywords: List[Tuple[str, float]], semaphore: asyncio.Semaphore) -> Tuple[int, str]:
+    """Generate a single topic label asynchronously with rate limiting"""
+    async with semaphore:
         keyword_str = ", ".join([word for word, _ in keywords])
         
         prompt = f"""Based on these keywords from student questions: {keyword_str}
@@ -131,20 +125,79 @@ Focus on what students are asking about. Examples: "Course Registration", "Finan
 Topic label:"""
         
         try:
-            response = client.chat.completions.create(
+            response = await async_client.chat.completions.create(
                 model=CHAT_MODEL,
                 messages=[{"role": "user", "content": prompt}],
                 max_completion_tokens=20,
                 temperature=0.3
             )
             
-            enhanced_labels[topic_id] = response.choices[0].message.content.strip().strip('"')
+            label = response.choices[0].message.content.strip().strip('"')
+            return topic_id, label
             
         except Exception as e:
             st.warning(f"Could not enhance label for topic {topic_id}: {str(e)}")
-            enhanced_labels[topic_id] = f"Topic {topic_id}"
+            return topic_id, f"Topic {topic_id}"
+
+
+async def enhance_topic_labels_async(topic_model: BERTopic, async_client: AsyncOpenAI) -> Dict[int, str]:
+    """Enhance topic labels using concurrent OpenAI API calls"""
+    
+    topic_info = topic_model.get_topic_info()
+    enhanced_labels = {}
+    
+    # Skip noise topic
+    valid_topics = [tid for tid in topic_info['Topic'].unique() if tid != -1]
+    
+    if not valid_topics:
+        return enhanced_labels
+    
+    # Create semaphore to limit concurrent requests (configurable, optimal for OpenAI rate limits)
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+    
+    # Create tasks for all topics
+    tasks = []
+    for topic_id in valid_topics:
+        keywords = topic_model.get_topic(topic_id)[:10]
+        task = generate_single_topic_label(async_client, topic_id, keywords, semaphore)
+        tasks.append(task)
+    
+    # Execute all tasks concurrently
+    st.write(f"🔄 Generating {len(tasks)} topic labels concurrently (max {MAX_CONCURRENT_REQUESTS} parallel requests)...")
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    # Process results
+    for result in results:
+        if isinstance(result, Exception):
+            st.warning(f"Error in topic labeling: {result}")
+        else:
+            topic_id, label = result
+            enhanced_labels[topic_id] = label
     
     return enhanced_labels
+
+
+def enhance_topic_labels(topic_model: BERTopic, client: OpenAI) -> dict:
+    """Enhanced topic labels using concurrent processing (wrapper for async function)"""
+    # Create async client from the sync client's API key
+    async_client = AsyncOpenAI(api_key=client.api_key)
+    
+    # Run the async function
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
+    if loop.is_running():
+        # If we're already in an event loop (like in Jupyter/Streamlit)
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(asyncio.run, enhance_topic_labels_async(topic_model, async_client))
+            return future.result()
+    else:
+        # If no event loop is running
+        return asyncio.run(enhance_topic_labels_async(topic_model, async_client))
 
 
 def create_results_dataframe(questions: List[str], topics: List[int], 
