@@ -10,17 +10,33 @@ load_dotenv()
 # API Configuration
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
-# Model Configuration  
-EMBEDDING_MODEL = os.getenv('OPENAI_EMBEDDING_MODEL', "text-embedding-3-large")
-CHAT_MODEL = os.getenv('OPENAI_CHAT_MODEL', "gpt-4o-mini")
+# Model Configuration - Updated for GPT-5 support
+EMBEDDING_MODEL = os.getenv('OPENAI_EMBEDDING_MODEL', "text-embedding-3-small")
+EMBEDDING_DIMENSIONS = int(os.getenv('OPENAI_EMBEDDING_DIMENSIONS', "1536"))
+CHAT_MODEL = os.getenv('OPENAI_CHAT_MODEL', "gpt-5-nano")
 
-# Clustering Configuration
-MIN_CLUSTER_SIZE = 15
+# Hybrid Processing Configuration
+SIMILARITY_THRESHOLD = float(os.getenv('SIMILARITY_THRESHOLD', "0.70"))
+REPRESENTATIVE_QUESTION_METHOD = os.getenv('REPRESENTATIVE_QUESTION_METHOD', "centroid")
+PROCESSING_MODE = os.getenv('PROCESSING_MODE', "sample")
+SAMPLE_SIZE = int(os.getenv('SAMPLE_SIZE', "2000"))
+
+# Clustering Configuration - Updated based on hybrid notebook
+MIN_CLUSTER_SIZE = int(os.getenv('HDBSCAN_MIN_CLUSTER_SIZE', "3"))  # Tighter clusters
 UMAP_N_NEIGHBORS = 15
-UMAP_N_COMPONENTS = 5
+UMAP_N_COMPONENTS = int(os.getenv('UMAP_N_COMPONENTS', "5"))
 UMAP_METRIC = 'cosine'
 HDBSCAN_METRIC = 'euclidean'
 HDBSCAN_CLUSTER_SELECTION_METHOD = 'eom'
+RANDOM_SEED = int(os.getenv('RANDOM_SEED', "42"))
+
+# Caching Configuration
+CACHE_EMBEDDINGS = os.getenv('CACHE_EMBEDDINGS', 'true').lower() == 'true'
+CACHE_DIR = os.getenv('CACHE_DIR', "embeddings_cache/")
+
+# Google Sheets Configuration
+GOOGLE_SHEETS_CREDENTIALS_PATH = os.getenv('GOOGLE_SHEETS_CREDENTIALS_PATH', "credentials/byu-pathway-chatbot-service-account.json")
+GOOGLE_SHEETS_AUTO_REFRESH_INTERVAL = int(os.getenv('GOOGLE_SHEETS_AUTO_REFRESH_INTERVAL', "10"))
 
 # Vectorizer Configuration
 MAX_FEATURES = 1000
@@ -31,7 +47,7 @@ RESULTS_DIR = "results"
 DATA_DIR = "data"
 
 # UI Configuration
-PAGE_TITLE = "BYU Pathway Missionary Questions Analysis"
+PAGE_TITLE = "BYU Pathway Hybrid Topic Analysis"
 PAGE_ICON = "🎓"
 LAYOUT = "wide"
 

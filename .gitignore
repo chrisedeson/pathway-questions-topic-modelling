@@ -48,6 +48,16 @@ coverage.xml
 *.cover
 *.py.cover
 .hypothesis/
+
+# Google Service Account Credentials - NEVER COMMIT THESE!
+credentials/*.json
+credentials/*service-account*.json
+*.json
+!package*.json
+
+# Embeddings cache directory
+embeddings_cache/
+cache/
 .pytest_cache/
 cover/
 

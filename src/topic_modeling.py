@@ -134,7 +134,7 @@ Topic label:"""
             response = client.chat.completions.create(
                 model=CHAT_MODEL,
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=20,
+                max_completion_tokens=20,
                 temperature=0.3
             )
             
