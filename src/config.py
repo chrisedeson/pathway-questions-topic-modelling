@@ -36,7 +36,6 @@ CACHE_DIR = os.getenv('CACHE_DIR', "embeddings_cache/")
 
 # Google Sheets Configuration
 GOOGLE_SHEETS_CREDENTIALS_PATH = os.getenv('GOOGLE_SHEETS_CREDENTIALS_PATH', "credentials/byu-pathway-chatbot-service-account.json")
-GOOGLE_SHEETS_AUTO_REFRESH_INTERVAL = int(os.getenv('GOOGLE_SHEETS_AUTO_REFRESH_INTERVAL', "10"))
 
 # File paths
 RESULTS_DIR = "results"

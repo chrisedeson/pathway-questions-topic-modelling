@@ -240,7 +240,6 @@ def display_about_tab():
         **📊 Data Sources**
         - File uploads (CSV/TXT)
         - Google Sheets integration
-        - Auto-refresh capabilities
         - Permission management
         """)
     
