@@ -10,29 +10,40 @@ load_dotenv()
 # API Configuration
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
-# Model Configuration  
-EMBEDDING_MODEL = os.getenv('OPENAI_EMBEDDING_MODEL', "text-embedding-3-large")
-CHAT_MODEL = os.getenv('OPENAI_CHAT_MODEL', "gpt-4o-mini")
+# Model Configuration - Updated for latest OpenAI models
+EMBEDDING_MODEL = os.getenv('OPENAI_EMBEDDING_MODEL', "text-embedding-3-small")
+EMBEDDING_DIMENSIONS = int(os.getenv('OPENAI_EMBEDDING_DIMENSIONS', "1536"))
+CHAT_MODEL = os.getenv('OPENAI_CHAT_MODEL', "gpt-5-nano")
 
-# Clustering Configuration
-MIN_CLUSTER_SIZE = 15
-UMAP_N_NEIGHBORS = 15
-UMAP_N_COMPONENTS = 5
-UMAP_METRIC = 'cosine'
-HDBSCAN_METRIC = 'euclidean'
-HDBSCAN_CLUSTER_SELECTION_METHOD = 'eom'
+# Hybrid Processing Configuration
+SIMILARITY_THRESHOLD = float(os.getenv('SIMILARITY_THRESHOLD', "0.70"))
+REPRESENTATIVE_QUESTION_METHOD = os.getenv('REPRESENTATIVE_QUESTION_METHOD', "centroid")
+PROCESSING_MODE = os.getenv('PROCESSING_MODE', "sample")
+SAMPLE_SIZE = int(os.getenv('SAMPLE_SIZE', "2000"))
 
-# Vectorizer Configuration
-MAX_FEATURES = 1000
-STOP_WORDS = "english"
+# Clustering Configuration - Updated based on hybrid notebook
+MIN_CLUSTER_SIZE = int(os.getenv('HDBSCAN_MIN_CLUSTER_SIZE', "8"))  # Increased to reduce over-clustering
+UMAP_N_COMPONENTS = int(os.getenv('UMAP_N_COMPONENTS', "5"))
+
+# Concurrent Processing Configuration
+MAX_CONCURRENT_REQUESTS = int(os.getenv('MAX_CONCURRENT_REQUESTS', "5"))  # OpenAI rate limit friendly
+ENABLE_ASYNC_PROCESSING = os.getenv('ENABLE_ASYNC_PROCESSING', "true").lower() == "true"
+RANDOM_SEED = int(os.getenv('RANDOM_SEED', "42"))
+
+# Caching Configuration
+CACHE_EMBEDDINGS = os.getenv('CACHE_EMBEDDINGS', 'true').lower() == 'true'
+CACHE_DIR = os.getenv('CACHE_DIR', "embeddings_cache/")
+
+# Google Sheets Configuration
+GOOGLE_SHEETS_CREDENTIALS_PATH = os.getenv('GOOGLE_SHEETS_CREDENTIALS_PATH', "credentials/byu-pathway-chatbot-service-account.json")
 
 # File paths
 RESULTS_DIR = "results"
 DATA_DIR = "data"
 
 # UI Configuration
-PAGE_TITLE = "BYU Pathway Missionary Questions Analysis"
-PAGE_ICON = "🎓"
+PAGE_TITLE = "BYU Pathway Hybrid Topic Analysis"
+PAGE_ICON = ""
 LAYOUT = "wide"
 
 # Custom CSS styles
@@ -134,9 +145,35 @@ CUSTOM_CSS = """
         border: 1px solid #30363d !important;
     }
     
-    [data-theme="dark"] .stSelectbox div[role="option"] {
+        [data-theme="dark"] .stSelectbox div[role="option"] {
         background-color: #262730 !important;
         color: #fafafa !important;
+    }
+    
+    /* Number input styling fixes */
+    .stNumberInput > div > div > input {
+        background-color: var(--background-color, white) !important;
+        color: var(--text-color, #262730) !important;
+        border: 1px solid var(--border-color, #d1d5db) !important;
+    }
+    
+    [data-theme="dark"] .stNumberInput > div > div > input {
+        background-color: #262730 !important;
+        color: #fafafa !important;
+        border: 1px solid #30363d !important;
+    }
+    
+    /* Button styling for better contrast */
+    .stNumberInput button {
+        background-color: var(--secondary-background-color, #f8f9fa) !important;
+        color: var(--text-color, #262730) !important;
+        border: 1px solid var(--border-color, #d1d5db) !important;
+    }
+    
+    [data-theme="dark"] .stNumberInput button {
+        background-color: #30363d !important;
+        color: #fafafa !important;
+        border: 1px solid #30363d !important;
     }
 </style>
 """

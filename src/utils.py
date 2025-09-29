@@ -3,132 +3,42 @@ Utility functions for the BYU Pathway Questions Analysis App
 """
 import pandas as pd
 import numpy as np
-from pathlib import Path
-import pickle
 from datetime import datetime
 from typing import Tuple, Optional, List
 import streamlit as st
 
 
-def load_analysis_results() -> Optional[pd.DataFrame]:
-    """Load the latest analysis results from the results directory"""
-    results_dir = Path("results")
-    if not results_dir.exists():
-        return None
-    
-    # Find the most recent results file
-    csv_files = list(results_dir.glob("pathway_questions_analysis_*.csv"))
-    if not csv_files:
-        return None
-    
-    latest_file = max(csv_files, key=lambda x: x.stat().st_mtime)
-    return pd.read_csv(latest_file)
-
-
-def load_topic_model():
-    """Load saved topic model if available"""
-    models_dir = Path("models")
-    model_files = list(models_dir.glob("topic_model_*.pkl"))
-    if not model_files:
-        return None
-    
-    latest_model = max(model_files, key=lambda x: x.stat().st_mtime)
-    with open(latest_model, 'rb') as f:
-        return pickle.load(f)
-
-
-def save_results(df: pd.DataFrame, topic_model=None) -> str:
-    """Save analysis results and optionally the topic model"""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-    results_dir = Path("results")
-    results_dir.mkdir(exist_ok=True)
-    
-    # Save CSV results
-    csv_path = results_dir / f"pathway_questions_analysis_{timestamp}.csv"
-    df.to_csv(csv_path, index=False)
-    
-    # Save topic model if provided
-    if topic_model is not None:
-        models_dir = Path("models")
-        models_dir.mkdir(exist_ok=True)
-        model_path = models_dir / f"topic_model_{timestamp}.pkl"
-        with open(model_path, 'wb') as f:
-            pickle.dump(topic_model, f)
-    
-    return str(csv_path)
-
-
-def create_download_csv(df: pd.DataFrame, include_representation: bool = False) -> str:
-    """Create CSV for download with specified columns"""
-    if include_representation:
-        # Create the format - representation and question columns
-        download_df = df[['Topic_Name', 'Question']].copy()
-        download_df = download_df.rename(columns={'Topic_Name': 'representation'})
-        # Sort by representation (topic) and then by question alphabetically
-        download_df = download_df.sort_values(['representation', 'Question'])
-    else:
-        download_df = df
-    
-    return download_df.to_csv(index=False)
-
-
 def calculate_clustering_metrics(df: pd.DataFrame, embeddings: Optional[np.ndarray] = None) -> dict:
     """Calculate detailed clustering metrics"""
-    # Import config to avoid hardcoding
-    from config import MIN_CLUSTER_SIZE
-    
     total_questions = len(df)
-    clustered_questions = len(df[df['Topic_ID'] != -1])
-    unclustered_questions = len(df[df['Topic_ID'] == -1])
     
-    # Count unique clusters (excluding noise cluster -1)
-    unique_clusters = len(df[df['Topic_ID'] != -1]['Topic_ID'].unique())
-    noise_points = unclustered_questions
-    noise_percentage = (noise_points / total_questions) * 100
-    categorized_percentage = (clustered_questions / total_questions) * 100
+    # Count clusters (excluding noise/ungrouped)
+    clusters_found = df['Topic'].nunique() - (1 if -1 in df['Topic'].values else 0)
+    
+    # Count clustered vs unclustered questions
+    questions_clustered = len(df[df['Topic'] != -1])
+    questions_not_clustered = len(df[df['Topic'] == -1])
+    noise_points = questions_not_clustered
+    
+    # Calculate percentages
+    noise_percentage = (noise_points / total_questions) * 100 if total_questions > 0 else 0
+    categorized_percentage = (questions_clustered / total_questions) * 100 if total_questions > 0 else 0
     
     metrics = {
         'total_questions': total_questions,
-        'clusters_found': unique_clusters,
-        'questions_clustered': clustered_questions,
-        'questions_not_clustered': unclustered_questions,
+        'clusters_found': clusters_found,
+        'questions_clustered': questions_clustered,
+        'questions_not_clustered': questions_not_clustered,
         'noise_points': noise_points,
         'noise_percentage': noise_percentage,
         'categorized_percentage': categorized_percentage,
-        'min_cluster_size': MIN_CLUSTER_SIZE  # Use actual config value
+        'min_cluster_size': 3  # From config
     }
     
-    # Add embeddings shape if available
     if embeddings is not None:
         metrics['embeddings_shape'] = embeddings.shape
     
     return metrics
-
-
-def format_metrics_display(metrics: dict) -> str:
-    """Format metrics for display"""
-    # Import config values to avoid hardcoding
-    from config import EMBEDDING_MODEL, CHAT_MODEL, MIN_CLUSTER_SIZE
-    
-    display_text = f"""
-**Clustering Results:**
-• Number of clusters found: {metrics['clusters_found']}
-• Number of questions clustered: {metrics['questions_clustered']}
-• Number of questions not clustered: {metrics['questions_not_clustered']}
-• Clusters found: {metrics['clusters_found']}
-• Noise points: {metrics['noise_points']} ({metrics['noise_percentage']:.1f}%)
-• Questions categorized: {metrics['categorized_percentage']:.1f}%
-• Min Cluster Size: {MIN_CLUSTER_SIZE}
-
-**Configuration:**
-• Embedding Model: {EMBEDDING_MODEL}
-• Chat Model: {CHAT_MODEL}
-"""
-    
-    if 'embeddings_shape' in metrics:
-        display_text += f"\n**Embeddings:**\n• Shape: {metrics['embeddings_shape']}"
-    
-    return display_text
 
 
 def validate_questions_file(content: str) -> Tuple[bool, List[str], str]:
@@ -141,17 +51,18 @@ def validate_questions_file(content: str) -> Tuple[bool, List[str], str]:
     if len(questions) < 50:
         return True, questions, f"⚠️ Warning: Only {len(questions)} questions found. For better results, consider using 50+ questions."
     
-    return True, questions, f"✅ File loaded: {len(questions)} questions found"
+    return True, questions, f"✅ Found {len(questions)} questions. Ready for analysis!"
 
 
 def create_session_state_defaults():
-    """Initialize default session state values"""
+    """Initialize session state with default values"""
     defaults = {
         'analysis_complete': False,
         'current_results': None,
-        'current_topic_model': None,
-        'current_embeddings': None,  # Store embeddings for enhanced metrics
-        'clustering_metrics': None
+        'current_topic_model': None, 
+        'current_embeddings': None,
+        'clustering_metrics': None,
+        'uploaded_file_name': None
     }
     
     for key, value in defaults.items():

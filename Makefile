@@ -1,4 +1,4 @@
-.PHONY: help install clean run-notebook activate setup check-env lint format test
+.PHONY: help install clean run-notebook run-lab run streamlit activate setup check-env create-env info update freeze
 .DEFAULT_GOAL := help
 
 # Variables
@@ -12,10 +12,9 @@ help: ## Show this help message
 	@echo "Available commands:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-setup: ## Complete project setup (create venv, install dependencies, setup kernel)
+setup: ## Complete project setup (create venv, install dependencies)
 	@echo "🚀 Setting up BYU Pathway Questions Topic Modeling project..."
 	@$(MAKE) install
-	@$(MAKE) setup-kernel
 	@$(MAKE) check-env
 	@echo "✅ Setup complete! Run 'make activate' to activate the virtual environment."
 
@@ -26,11 +25,6 @@ install: ## Create virtual environment and install dependencies
 	$(PIP) install --upgrade pip
 	$(PIP) install -r requirements.txt
 	@echo "✅ Dependencies installed successfully!"
-
-setup-kernel: ## Setup Jupyter kernel for the virtual environment
-	@echo "🔧 Setting up Jupyter kernel..."
-	$(PYTHON) -m ipykernel install --user --name=pathway-questions --display-name="Python (Pathway Questions)"
-	@echo "✅ Jupyter kernel 'pathway-questions' created!"
 
 activate: ## Show command to activate virtual environment
 	@echo "To activate the virtual environment, run:"
@@ -46,11 +40,13 @@ run-lab: ## Start JupyterLab server
 	@if [ ! -d "$(VENV_PATH)" ]; then echo "❌ Virtual environment not found. Run 'make install' first."; exit 1; fi
 	$(JUPYTER) lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root
 
-streamlit: ## Run Streamlit app (when ready)
+run: ## Run Streamlit app
 	@echo "🚀 Starting Streamlit app..."
 	@if [ ! -d "$(VENV_PATH)" ]; then echo "❌ Virtual environment not found. Run 'make install' first."; exit 1; fi
-	@if [ ! -f "streamlit_app.py" ]; then echo "❌ streamlit_app.py not found. Create it first."; exit 1; fi
-	$(STREAMLIT) run streamlit_app.py
+	@if [ ! -f "app.py" ]; then echo "❌ app.py not found. Create it first."; exit 1; fi
+	$(STREAMLIT) run app.py
+
+streamlit: run ## Alias for run command
 
 check-env: ## Check if environment variables are set
 	@echo "🔍 Checking environment setup..."
@@ -83,39 +79,29 @@ clean: ## Remove virtual environment and cache files
 	find . -type d -name ".pytest_cache" -exec rm -rf {} +
 	@echo "✅ Cleanup complete!"
 
-lint: ## Run linting checks
-	@if [ ! -d "$(VENV_PATH)" ]; then echo "❌ Virtual environment not found. Run 'make install' first."; exit 1; fi
-	$(PYTHON) -m flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-
-format: ## Format code with black
-	@if [ ! -d "$(VENV_PATH)" ]; then echo "❌ Virtual environment not found. Run 'make install' first."; exit 1; fi
-	$(PYTHON) -m black .
-
-test: ## Run tests (when available)
-	@echo "🧪 Running tests..."
-	@echo "No tests configured yet."
-
 info: ## Show project information
 	@echo "📊 BYU Pathway Questions Topic Modeling Project"
 	@echo "=============================================="
 	@echo "Python Version: $$(python3 --version)"
 	@echo "Virtual Environment: $(VENV_PATH)"
-	@echo "Main Notebook: Text_Clustering_&_Topic_Modeling_of_Pathway_Questions_with_OpenAI_and_BERTopic.ipynb"
+	@echo "Main App: app.py"
 	@echo ""
 	@echo "Quick Start:"
-	@echo "  1. make setup          # Complete project setup"
+	@echo "  1. make install        # Install dependencies"
 	@echo "  2. make create-env      # Create .env template"
 	@echo "  3. Edit .env with your OpenAI API key"
 	@echo "  4. make activate       # Get activation command"
-	@echo "  5. make run-notebook   # Start Jupyter notebook"
+	@echo "  5. make run            # Start Streamlit app"
 
 update: ## Update dependencies
 	@echo "📦 Updating dependencies..."
+	@if [ ! -d "$(VENV_PATH)" ]; then echo "❌ Virtual environment not found. Run 'make install' first."; exit 1; fi
 	$(PIP) install --upgrade pip
 	$(PIP) install --upgrade -r requirements.txt
 	@echo "✅ Dependencies updated!"
 
 freeze: ## Generate current dependencies list
 	@echo "📋 Current dependencies:"
+	@if [ ! -d "$(VENV_PATH)" ]; then echo "❌ Virtual environment not found. Run 'make install' first."; exit 1; fi
 	$(PIP) freeze > requirements-freeze.txt
 	@echo "✅ Dependencies saved to requirements-freeze.txt"

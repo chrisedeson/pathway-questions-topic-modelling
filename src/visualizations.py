@@ -6,15 +6,31 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
+from typing import Dict
 from bertopic import BERTopic
 from sklearn.metrics.pairwise import cosine_similarity
 from typing import Optional
 
 
-def display_interactive_scatter(df: pd.DataFrame, topic_model: Optional[BERTopic] = None, embeddings: Optional[np.ndarray] = None):
-    """Display interactive scatter plot of questions"""
-    from components import create_chart_header
+def create_chart_header(title: str, explanation: str, icon: str = "❔"):
+    """Create a chart header with a helpful tooltip explanation"""
+    col1, col2 = st.columns([10, 1])
+    with col1:
+        st.subheader(title)
+    with col2:
+        st.markdown(f"""
+        <div style="text-align: right; padding-top: 10px;">
+            <span title="{explanation}" style="font-size: 16px; cursor: help;">{icon}</span>
+        </div>
+        """, unsafe_allow_html=True)
     
+    # Also show as an expandable info box for mobile/accessibility
+    with st.expander("ℹ️ What does this chart show?", expanded=False):
+        st.write(explanation)
+
+
+def display_interactive_scatter(df: pd.DataFrame, embeddings: np.ndarray, topic_model=None, chart_key: str = "interactive_scatter"):
+    """Display interactive 2D scatter plot of questions using UMAP dimensionality reduction"""
     create_chart_header(
         "🎯 Question Distribution by Topic", 
         "This is like a map of all your questions! Each dot represents one question. Questions that are about similar topics are placed closer together. It's like sorting your clothes - all the shirts go in one pile, all the pants in another. Hover over any dot to read the actual question and see how confident the AI is about its topic!"
@@ -75,8 +91,6 @@ def display_interactive_scatter(df: pd.DataFrame, topic_model: Optional[BERTopic
 
 def display_topic_distribution_chart(df: pd.DataFrame, chart_key: str = "topic_distribution_bar"):
     """Display topic distribution bar chart with unique key"""
-    from components import create_chart_header
-    
     create_chart_header(
         "📊 Questions Per Topic", 
         "This bar chart shows how many questions belong to each topic - like counting how many people are in different clubs at school. The taller the bar, the more questions we found about that topic. This helps you see which topics students ask about most!"
@@ -104,10 +118,8 @@ def display_topic_distribution_chart(df: pd.DataFrame, chart_key: str = "topic_d
     st.info("🔍 **Quick Insight:** The leftmost (tallest) bars show the most common question topics. The rightmost (shortest) bars are rare topics that only a few students ask about.")
 
 
-def display_topic_hierarchy(topic_model: BERTopic):
+def display_topic_hierarchy(topic_model: BERTopic, topic_names: Dict[int, str] = None):
     """Display topic hierarchy visualization"""
-    from components import create_chart_header
-    
     create_chart_header(
         "🌳 Topic Hierarchy & Clustering", 
         "Think of this like a family tree, but for topics! This chart shows how different topics are related to each other. Topics that branch together are more similar - like how 'dogs' and 'cats' might branch together under 'pets'. The height shows how different topics are from each other."
@@ -116,19 +128,32 @@ def display_topic_hierarchy(topic_model: BERTopic):
     try:
         # Hierarchical clustering visualization
         fig_hier = topic_model.visualize_hierarchy()
-        fig_hier.update_layout(height=700)
+        
+        # Dynamic height based on number of topics
+        num_topics = len(topic_model.get_topic_info())
+        if num_topics <= 50:
+            height = 600
+        elif num_topics <= 100:
+            height = 800
+        elif num_topics <= 200:
+            height = 1000
+        elif num_topics <= 500:
+            height = 2500
+        else:
+            height = 3000  # For very large datasets
+        
+        fig_hier.update_layout(height=height)
         st.plotly_chart(fig_hier, use_container_width=True, key="topic_hierarchy")
         
+        st.info(f"📊 **Chart Info**: Displaying {num_topics} topics with dynamic height ({height}px) for better readability.")
         st.success("🌟 **How to read this:** Each line represents a topic. Topics that join together lower on the tree are more similar. The higher up they join, the more different they are!")
         
     except Exception as e:
         st.error(f"Could not create hierarchy visualization: {str(e)}")
 
 
-def display_topic_similarity_heatmap(topic_model: BERTopic):
+def display_topic_similarity_heatmap(topic_model: BERTopic, topic_names: Dict[int, str] = None):
     """Display topic similarity heatmap"""
-    from components import create_chart_header
-    
     create_chart_header(
         "🔥 Topic Similarity Heatmap", 
         "This is like a friendship map! Each square shows how similar two topics are to each other. Red squares mean 'very similar topics' (like best friends), while blue squares mean 'very different topics' (like strangers). Use this to spot topics that might be talking about the same thing!"
@@ -141,10 +166,19 @@ def display_topic_similarity_heatmap(topic_model: BERTopic):
             topic_embeddings = topic_model.topic_embeddings_
             similarity_matrix = cosine_similarity(topic_embeddings)
             
-            # Get topic names
-            topic_info = topic_model.get_topic_info()
-            topic_names = [f"Topic {i}: {name[:30]}..." if len(name) > 30 else f"Topic {i}: {name}" 
-                         for i, name in enumerate(topic_info['Name'][:20])]  # Limit to top 20
+            # Get topic names - use generated names if available, otherwise fall back to BERTopic names
+            if topic_names:
+                display_names = []
+                for i in range(min(20, len(topic_model.get_topic_info()))):
+                    if i in topic_names:
+                        name = topic_names[i]
+                        display_names.append(name[:30] + "..." if len(name) > 30 else name)
+                    else:
+                        display_names.append(f"Topic {i}")
+            else:
+                topic_info = topic_model.get_topic_info()
+                display_names = [f"Topic {i}: {name[:30]}..." if len(name) > 30 else f"Topic {i}: {name}" 
+                             for i, name in enumerate(topic_info['Name'][:20])]  # Limit to top 20
             
             if len(similarity_matrix) > 20:
                 similarity_matrix = similarity_matrix[:20, :20]
@@ -152,8 +186,8 @@ def display_topic_similarity_heatmap(topic_model: BERTopic):
             fig_heatmap = px.imshow(
                 similarity_matrix,
                 labels=dict(x="Topics", y="Topics", color="Similarity"),
-                x=topic_names,
-                y=topic_names,
+                x=display_names,
+                y=display_names,
                 title="Topic Similarity Matrix",
                 color_continuous_scale='RdYlBu_r',
                 aspect="auto"
@@ -173,8 +207,6 @@ def display_topic_similarity_heatmap(topic_model: BERTopic):
 
 def display_confidence_distribution(df: pd.DataFrame):
     """Display confidence/probability distribution"""
-    from components import create_chart_header
-    
     create_chart_header(
         "📊 Confidence Distribution", 
         "This shows how confident the AI is about its topic assignments! Think of it like test scores - higher numbers mean the AI is really sure about which topic a question belongs to. Lower scores mean the AI had to guess a bit. Most questions should have pretty high confidence scores if the analysis worked well!"
@@ -219,10 +251,8 @@ def display_confidence_distribution(df: pd.DataFrame):
     st.success("🎯 **Reading Box Plots:** Higher boxes = more confident topics | Skinnier boxes = more consistent confidence | Dots outside boxes = unusual scores")
 
 
-def display_topic_words_chart(topic_model: BERTopic):
-    """Display top words for each topic"""
-    from components import create_chart_header
-    
+def display_topic_words_chart(topic_model: BERTopic, topic_names: Dict[int, str] = None):
+    """Display top words for each topic using generated topic names"""
     create_chart_header(
         "🔤 Top Words by Topic", 
         "These are the most important words that define each topic! Think of them as hashtags or keywords - they tell you what each topic is really about. Longer bars mean more important words for that topic. If you see weird words, the AI might need better training!"
@@ -232,15 +262,22 @@ def display_topic_words_chart(topic_model: BERTopic):
         topic_info = topic_model.get_topic_info()
         
         # Select topics to display (excluding noise topic -1)
-        topics_to_show = topic_info[topic_info['Topic'] != -1]['Topic'].head(10).tolist()
+        topics_to_show = topic_info[topic_info['Topic'] != -1]['Topic'].tolist()
         
         # Create word importance data
         word_data = []
         for topic_id in topics_to_show:
             words = topic_model.get_topic(topic_id)[:8]  # Top 8 words
+            
+            # Use generated topic name if available, otherwise fall back to Topic ID
+            if topic_names and topic_id in topic_names:
+                topic_label = topic_names[topic_id]
+            else:
+                topic_label = f"Topic {topic_id}"
+                
             for word, score in words:
                 word_data.append({
-                    'Topic': f"Topic {topic_id}",
+                    'Topic': topic_label,
                     'Word': word,
                     'Score': score
                 })
@@ -263,124 +300,9 @@ def display_topic_words_chart(topic_model: BERTopic):
                 yaxis={'categoryorder': 'total ascending'}
             )
             
-            st.plotly_chart(fig, use_container_width=True, key="topic_words_chart")
+            st.plotly_chart(fig, width="stretch", key="topic_words_chart")
             
             st.info("🔍 **Pro Tip:** Look for words that make sense together! If you see random words mixed together, that topic might need to be split into smaller, more focused topics.")
             
     except Exception as e:
         st.warning(f"Could not create topic words chart: {str(e)}")
-
-
-def display_visualization_tabs(df: pd.DataFrame, topic_model: Optional[BERTopic] = None, embeddings: Optional[np.ndarray] = None):
-    """Display all visualizations in organized tabs"""
-    viz_tab1, viz_tab2, viz_tab3, viz_tab4 = st.tabs([
-        "🎯 Question Scatter", 
-        "🌳 Topic Hierarchy", 
-        "📊 Distributions", 
-        "🔤 Topic Words"
-    ])
-    
-    with viz_tab1:
-        display_interactive_scatter(df, topic_model, embeddings)
-    
-    with viz_tab2:
-        if topic_model is not None:
-            display_topic_hierarchy(topic_model)
-            display_topic_similarity_heatmap(topic_model)
-        else:
-            st.info("Topic model not available for hierarchy visualization.")
-    
-    with viz_tab3:
-        display_confidence_distribution(df)
-        display_topic_distribution_chart(df, chart_key="topic_distribution_main")
-    
-    with viz_tab4:
-        if topic_model is not None:
-            display_topic_words_chart(topic_model)
-        else:
-            st.info("Topic model not available for word analysis.")
-
-
-def display_metrics_overview(metrics: dict):
-    """Display comprehensive metrics"""
-    st.subheader("📈 Comprehensive Analysis Metrics")
-    
-    # Main metrics in columns
-    col1, col2, col3, col4, col5 = st.columns(5)
-    
-    with col1:
-        st.metric("Total Questions", metrics['total_questions'])
-    
-    with col2:
-        st.metric("Clusters Found", metrics['clusters_found'])
-    
-    with col3:
-        st.metric("Questions Clustered", metrics['questions_clustered'])
-    
-    with col4:
-        st.metric("Not Clustered", metrics['questions_not_clustered'])
-    
-    with col5:
-        st.metric("Categorized", f"{metrics['categorized_percentage']:.1f}%")
-    
-    # Detailed metrics in expandable section
-    with st.expander("📊 Detailed Clustering Results", expanded=True):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown(f"""
-            **Clustering Results:**
-            - Clusters found: **{metrics['clusters_found']}**
-            - Noise points: **{metrics['noise_points']} ({metrics['noise_percentage']:.1f}%)**
-            - Questions categorized: **{metrics['categorized_percentage']:.1f}%**
-            - Min Cluster Size: **{metrics['min_cluster_size']}**
-            """)
-        
-        with col2:
-            st.markdown(f"""
-            **Configuration:**
-            - Embedding Model: **text-embedding-3-large**
-            - Chat Model: **gpt-4o-mini**
-            - Questions analyzed: **{metrics['total_questions']}**
-            """)
-        
-        if 'embeddings_shape' in metrics:
-            st.markdown(f"""
-            **Embeddings Information:**
-            - Dimensions: **{metrics['embeddings_shape']}**
-            """)
-
-
-def create_download_section(df: pd.DataFrame):
-    """Create download section in CSV format"""
-    st.subheader("💾 Download Results")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("**📋 Standard Download**")
-        csv_standard = df.to_csv(index=False)
-        st.download_button(
-            label="⬇️ Download Full Analysis CSV",
-            data=csv_standard,
-            file_name=f"pathway_questions_complete_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
-            mime="text/csv",
-            help="Download complete analysis with all columns"
-        )
-    
-    with col2:
-        st.markdown("**📝 Elder Edwards Review Format**")
-        # Create the specific format: representation and question columns
-        review_df = df[['Topic_Name', 'Question']].copy()
-        review_df = review_df.rename(columns={'Topic_Name': 'representation'})
-        # Sort by representation and then by question alphabetically
-        review_df = review_df.sort_values(['representation', 'Question'])
-        
-        csv_review = review_df.to_csv(index=False)
-        st.download_button(
-            label="⬇️ Download Review CSV",
-            data=csv_review,
-            file_name=f"pathway_questions_review_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
-            mime="text/csv",
-            help="Download sorted by topic (representation) and question for easy review"
-        )

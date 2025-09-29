@@ -48,6 +48,23 @@ coverage.xml
 *.cover
 *.py.cover
 .hypothesis/
+
+# Google Service Account Credentials - NEVER COMMIT THESE!
+credentials/*.json
+credentials/*service-account*.json
+!credentials/README.md
+
+# Insights folder - contains experimental notebooks and scripts
+insights/*.py
+insights/*.ipynb
+insights/*.html
+insights/outputs/
+insights/cache/
+!insights/README.md
+
+# Embeddings cache directory
+embeddings_cache/
+cache/
 .pytest_cache/
 cover/
 
@@ -215,14 +232,31 @@ data/*.xls
 data/*.pkl
 !data/README.md
 
+# Generated output files - these should go in results/ directory
+*.csv
+pathway_questions_*.csv
+new_topics_*.csv
+similar_questions_*.csv
+topic_analysis_*.csv
+hybrid_results_*.csv
+
+# Results directory - keep structure but ignore all output files
+results/*.csv
+results/*.json
+results/*.pkl
+results/*.xlsx
+results/*.txt
+results/outputs/
+results/cache/
+!results/README.md
+
 # Models folder and pickle files
 models/
 *.pkl
 
-# Results folder and CSV files
-results/
-*.csv
-*pathway*.csv
+# Backup files
+*.backup
+*~
 
 # Streamlit cache and temporary files
 .streamlit/
