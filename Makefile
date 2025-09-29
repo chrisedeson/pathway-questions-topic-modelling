@@ -43,8 +43,8 @@ run-lab: ## Start JupyterLab server
 run: ## Run Streamlit app
 	@echo "🚀 Starting Streamlit app..."
 	@if [ ! -d "$(VENV_PATH)" ]; then echo "❌ Virtual environment not found. Run 'make install' first."; exit 1; fi
-	@if [ ! -f "app.py" ]; then echo "❌ app.py not found. Create it first."; exit 1; fi
-	$(STREAMLIT) run app.py
+	@if [ ! -f "streamlit_app.py" ]; then echo "❌ streamlit_app.py not found. Create it first."; exit 1; fi
+	$(STREAMLIT) run streamlit_app.py
 
 streamlit: run ## Alias for run command
 
@@ -84,7 +84,7 @@ info: ## Show project information
 	@echo "=============================================="
 	@echo "Python Version: $$(python3 --version)"
 	@echo "Virtual Environment: $(VENV_PATH)"
-	@echo "Main App: app.py"
+	@echo "Main App: streamlit_app.py"
 	@echo ""
 	@echo "Quick Start:"
 	@echo "  1. make install        # Install dependencies"
