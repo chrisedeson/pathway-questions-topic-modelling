@@ -22,7 +22,7 @@ PROCESSING_MODE = os.getenv('PROCESSING_MODE', "sample")
 SAMPLE_SIZE = int(os.getenv('SAMPLE_SIZE', "2000"))
 
 # Clustering Configuration - Updated based on hybrid notebook
-MIN_CLUSTER_SIZE = int(os.getenv('HDBSCAN_MIN_CLUSTER_SIZE', "3"))  # Tighter clusters
+MIN_CLUSTER_SIZE = int(os.getenv('HDBSCAN_MIN_CLUSTER_SIZE', "8"))  # Increased to reduce over-clustering
 UMAP_N_COMPONENTS = int(os.getenv('UMAP_N_COMPONENTS', "5"))
 
 # Concurrent Processing Configuration

@@ -128,9 +128,24 @@ def display_topic_hierarchy(topic_model: BERTopic, topic_names: Dict[int, str] =
     try:
         # Hierarchical clustering visualization
         fig_hier = topic_model.visualize_hierarchy()
-        fig_hier.update_layout(height=700)
+        
+        # Dynamic height based on number of topics
+        num_topics = len(topic_model.get_topic_info())
+        if num_topics <= 50:
+            height = 600
+        elif num_topics <= 100:
+            height = 800
+        elif num_topics <= 200:
+            height = 1000
+        elif num_topics <= 500:
+            height = 2500
+        else:
+            height = 3000  # For very large datasets
+        
+        fig_hier.update_layout(height=height)
         st.plotly_chart(fig_hier, use_container_width=True, key="topic_hierarchy")
         
+        st.info(f"📊 **Chart Info**: Displaying {num_topics} topics with dynamic height ({height}px) for better readability.")
         st.success("🌟 **How to read this:** Each line represents a topic. Topics that join together lower on the tree are more similar. The higher up they join, the more different they are!")
         
     except Exception as e:
@@ -247,7 +262,7 @@ def display_topic_words_chart(topic_model: BERTopic, topic_names: Dict[int, str]
         topic_info = topic_model.get_topic_info()
         
         # Select topics to display (excluding noise topic -1)
-        topics_to_show = topic_info[topic_info['Topic'] != -1]['Topic'].head(10).tolist()
+        topics_to_show = topic_info[topic_info['Topic'] != -1]['Topic'].tolist()
         
         # Create word importance data
         word_data = []

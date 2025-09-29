@@ -530,6 +530,16 @@ class HybridTopicProcessor:
         cluster_labels = clustered_df['cluster_id'].tolist() if len(clustered_df) > 0 else []
         n_clusters = len(set(cluster_labels)) if cluster_labels else 0
         
+        # Check for over-clustering and provide recommendations
+        total_questions = len(questions)
+        if n_clusters > 0:
+            clustering_ratio = n_clusters / total_questions
+            if clustering_ratio > 0.5:  # More than 50% of questions become individual topics
+                st.warning(f"⚠️ **High clustering detected**: {n_clusters} topics from {total_questions} questions ({clustering_ratio:.1%})")
+                st.info("💡 **Recommendation**: Consider increasing MIN_CLUSTER_SIZE in config.py to create fewer, more meaningful topics.")
+            elif clustering_ratio > 0.3:  # More than 30%
+                st.info(f"ℹ️ **Moderate clustering**: {n_clusters} topics from {total_questions} questions ({clustering_ratio:.1%})")
+        
         st.success(f"✅ Found {n_clusters} new topic clusters")
         
         return (
@@ -626,17 +636,34 @@ Now generate the topic name for the questions above:
         
         topic_names = {}
         cluster_groups = clustered_questions_df.groupby('cluster_id')
+        total_clusters = len(cluster_groups)
+        
+        # Create progress components
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        completed_count = 0
+        
+        status_text.text(f"🎯 Generating topic names: 0/{total_clusters} completed (0%)")
         
         # Create semaphore to limit concurrent requests
         semaphore = asyncio.Semaphore(5)
         
         async def generate_for_cluster(cluster_id, cluster_data):
+            nonlocal completed_count
             async with semaphore:
                 questions = cluster_data['question'].tolist()
                 # Use topic_keywords from BERTopic if available (like insights)
                 keywords = cluster_data['topic_keywords'].iloc[0] if 'topic_keywords' in cluster_data.columns else ""
                 
                 topic_name = await self.generate_topic_name(questions, keywords)
+                
+                # Update progress
+                completed_count += 1
+                progress = completed_count / total_clusters
+                progress_bar.progress(progress)
+                percentage = int(progress * 100)
+                status_text.text(f"🎯 Generating topic names: {completed_count}/{total_clusters} completed ({percentage}%)")
+                
                 return cluster_id, topic_name
         
         # Generate all topic names concurrently
@@ -653,6 +680,11 @@ Now generate the topic name for the questions above:
             else:
                 cluster_id, topic_name = result
                 topic_names[cluster_id] = topic_name
+        
+        # Clear progress indicators and show completion
+        progress_bar.empty()
+        status_text.empty()
+        st.success(f"✅ Topic name generation complete! Generated {len(topic_names)} topic names.")
         
         return topic_names
     

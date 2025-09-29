@@ -341,6 +341,25 @@ def create_hybrid_processing_tab():
             )
         else:
             sample_size = len(questions_df)
+        
+        # Clustering configuration
+        with st.expander("🔧 **Advanced Clustering Settings**", expanded=False):
+            from config import MIN_CLUSTER_SIZE
+            st.write(f"**Current MIN_CLUSTER_SIZE**: {MIN_CLUSTER_SIZE}")
+            
+            # Provide guidance
+            expected_questions = sample_size if processing_mode == "sample" else len(questions_df)
+            recommended_size = max(5, min(15, expected_questions // 200))  # Dynamic recommendation
+            
+            st.info(f"💡 **Recommendation**: For {expected_questions} questions, consider MIN_CLUSTER_SIZE between {recommended_size-2} and {recommended_size+3}")
+            st.markdown("""
+            **Clustering Guidelines:**
+            - **Smaller values (3-5)**: More topics, but risk over-clustering
+            - **Medium values (8-12)**: Balanced, good for most datasets
+            - **Larger values (15-25)**: Fewer, broader topics
+            
+            **Optimal ratio**: Aim for 10-30% of questions becoming new topics.
+            """)
     
     with col2:
         if topics_df is not None:
@@ -366,7 +385,7 @@ def create_hybrid_processing_tab():
         
         if result:
             st.session_state['hybrid_results'] = result
-            st.success("✅ **Analysis Complete!** Check the results tabs below.")
+            st.success("✅ **Analysis Complete!** Results will show in a few moments...")
             st.rerun()
 
 
@@ -636,8 +655,8 @@ def display_output_files_tab(output_files: list):
             # Load and display preview
             try:
                 df = pd.read_csv(filepath)
-                st.write(f"**Preview** ({len(df)} rows):")
-                st.dataframe(df.head(10), width="stretch")
+                st.write(f"**Complete Data** ({len(df)} rows):")
+                st.dataframe(df, width="stretch")
                 
                 # Download button
                 with open(filepath, 'rb') as f:
