@@ -1,6 +1,16 @@
 """
-Enhanced UI Components for BYU Pathway Hybrid Topic Analysis
+Enhanced UI Components for BYU Pathway Questions Analysis
 """
+
+import streamlit as st
+import pandas as pd
+from typing import Dict, List, Optional, Any
+import os
+from pathlib import Path
+import plotly.graph_objects as go
+from sklearn.metrics import silhouette_score
+from sklearn.metrics.pairwise import cosine_similarity
+import visualizations
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -12,7 +22,6 @@ import io
 from streamlit_autorefresh import st_autorefresh
 
 from utils import validate_questions_file, create_session_state_defaults, calculate_clustering_metrics
-from visualizations import display_metrics_overview
 from google_sheets_utils import (
     GoogleSheetsManager, display_sheets_permission_status,
     create_sheets_connection_ui, SheetsPermission
@@ -360,7 +369,7 @@ def run_hybrid_analysis(questions_df: pd.DataFrame,
         # Run analysis
         with st.spinner("Running hybrid analysis..."):
             result = asyncio.run(processor.process_hybrid_analysis(
-                questions_df, topics_df, threshold
+                questions_df, topics_df, threshold, mode
             ))
             
         return result
@@ -368,6 +377,7 @@ def run_hybrid_analysis(questions_df: pd.DataFrame,
     except Exception as e:
         st.error(f"Error during analysis: {str(e)}")
         return None
+
 
 
 def display_hybrid_results(results: Dict[str, Any]):
@@ -397,11 +407,12 @@ def display_hybrid_results(results: Dict[str, Any]):
         st.metric("📁 **Output Files**", len(output_files))
     
     # Results tabs
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📋 Similar Questions", 
         "🆕 New Topics", 
+        "📊 Visualizations",
         "📁 Output Files",
-        "📊 Analysis Details"
+        "� Analysis Details"
     ])
     
     with tab1:
@@ -411,9 +422,12 @@ def display_hybrid_results(results: Dict[str, Any]):
         display_new_topics_tab(clustered_df, topic_names)
     
     with tab3:
-        display_output_files_tab(output_files)
+        display_visualizations_tab(results)
     
     with tab4:
+        display_output_files_tab(output_files)
+    
+    with tab5:
         display_analysis_details_tab(results)
 
 
@@ -530,6 +544,86 @@ def display_output_files_tab(output_files: list):
                 
             except Exception as e:
                 st.error(f"Error loading file: {str(e)}")
+
+
+def display_visualizations_tab(results: Dict[str, Any]):
+    """Display comprehensive visualizations"""
+    
+    st.subheader("📊 Data Visualizations")
+    
+    # Get the data and models from results
+    eval_df = results.get('eval_questions_df')
+    topic_model = results.get('topic_model')
+    embeddings = results.get('embeddings')
+    similar_df = results.get('similar_questions_df')
+    clustered_df = results.get('clustered_questions_df')
+    
+    if eval_df is None or eval_df.empty:
+        st.info("No data available for visualization.")
+        return
+    
+    # Create visualization sub-tabs
+    viz_tab1, viz_tab2, viz_tab3, viz_tab4 = st.tabs([
+        "🎯 Topic Distribution", 
+        "📊 Confidence Analysis",
+        "🌳 Topic Relationships", 
+        "🔤 Topic Keywords"
+    ])
+    
+    with viz_tab1:
+        st.write("### Question Distribution Analysis")
+        
+        # Try to create proper dataframe for visualization
+        if similar_df is not None and not similar_df.empty:
+            # Prepare data for visualization
+            viz_df = similar_df.copy()
+            if 'matched_topic' in viz_df.columns:
+                viz_df['Topic_Name'] = viz_df['matched_topic']
+                viz_df['Probability'] = viz_df.get('similarity_score', 0.5)
+                viz_df['Question'] = viz_df.get('question', 'Unknown')
+                viz_df['Topic_ID'] = range(len(viz_df))
+                
+                # Interactive scatter plot if we have embeddings
+                if embeddings is not None and topic_model is not None:
+                    visualizations.display_interactive_scatter(viz_df, embeddings, topic_model)
+                else:
+                    visualizations.display_topic_distribution_chart(viz_df)
+            else:
+                st.info("No topic distribution data available for visualization.")
+        else:
+            st.info("No matched questions available for distribution visualization.")
+    
+    with viz_tab2:
+        st.write("### Confidence Analysis")
+        
+        if similar_df is not None and not similar_df.empty and 'similarity_score' in similar_df.columns:
+            # Prepare confidence data
+            conf_df = similar_df.copy()
+            conf_df['Probability'] = conf_df['similarity_score']
+            conf_df['Topic_Name'] = conf_df.get('matched_topic', 'Unknown')
+            conf_df['Topic_ID'] = range(len(conf_df))
+            
+            visualizations.display_confidence_distribution(conf_df)
+        else:
+            st.info("No confidence data available for analysis.")
+    
+    with viz_tab3:
+        st.write("### Topic Relationships")
+        
+        if topic_model is not None:
+            visualizations.display_topic_hierarchy(topic_model)
+            st.divider()
+            visualizations.display_topic_similarity_heatmap(topic_model)
+        else:
+            st.info("Topic model not available for relationship analysis.")
+    
+    with viz_tab4:
+        st.write("### Topic Keywords")
+        
+        if topic_model is not None:
+            visualizations.display_topic_words_chart(topic_model)
+        else:
+            st.info("Topic model not available for keyword analysis.")
 
 
 def display_analysis_details_tab(results: Dict[str, Any]):

@@ -9,7 +9,6 @@ import streamlit as st
 import sys
 import os
 from pathlib import Path
-import asyncio
 
 # Add src directory to Python path
 current_dir = Path(__file__).parent.absolute()

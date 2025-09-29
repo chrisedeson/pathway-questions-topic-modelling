@@ -10,7 +10,7 @@ load_dotenv()
 # API Configuration
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
-# Model Configuration - Updated for GPT-5 support
+# Model Configuration - Updated for latest OpenAI models
 EMBEDDING_MODEL = os.getenv('OPENAI_EMBEDDING_MODEL', "text-embedding-3-small")
 EMBEDDING_DIMENSIONS = int(os.getenv('OPENAI_EMBEDDING_DIMENSIONS', "1536"))
 CHAT_MODEL = os.getenv('OPENAI_CHAT_MODEL', "gpt-5-nano")
@@ -23,11 +23,7 @@ SAMPLE_SIZE = int(os.getenv('SAMPLE_SIZE', "2000"))
 
 # Clustering Configuration - Updated based on hybrid notebook
 MIN_CLUSTER_SIZE = int(os.getenv('HDBSCAN_MIN_CLUSTER_SIZE', "3"))  # Tighter clusters
-UMAP_N_NEIGHBORS = 15
 UMAP_N_COMPONENTS = int(os.getenv('UMAP_N_COMPONENTS', "5"))
-UMAP_METRIC = 'cosine'
-HDBSCAN_METRIC = 'euclidean'
-HDBSCAN_CLUSTER_SELECTION_METHOD = 'eom'
 
 # Concurrent Processing Configuration
 MAX_CONCURRENT_REQUESTS = int(os.getenv('MAX_CONCURRENT_REQUESTS', "5"))  # OpenAI rate limit friendly
@@ -41,10 +37,6 @@ CACHE_DIR = os.getenv('CACHE_DIR', "embeddings_cache/")
 # Google Sheets Configuration
 GOOGLE_SHEETS_CREDENTIALS_PATH = os.getenv('GOOGLE_SHEETS_CREDENTIALS_PATH', "credentials/byu-pathway-chatbot-service-account.json")
 GOOGLE_SHEETS_AUTO_REFRESH_INTERVAL = int(os.getenv('GOOGLE_SHEETS_AUTO_REFRESH_INTERVAL', "10"))
-
-# Vectorizer Configuration
-MAX_FEATURES = 1000
-STOP_WORDS = "english"
 
 # File paths
 RESULTS_DIR = "results"
