@@ -197,7 +197,7 @@ def display_about_tab():
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("🎯 What is Hybrid Processing?")
+        st.subheader("What is Hybrid Processing?")
         st.markdown("""
         **Hybrid Topic Analysis** combines two powerful approaches:
         
@@ -215,7 +215,7 @@ def display_about_tab():
         """)
     
     with col2:
-        st.subheader("🔧 How Elder Edwards Uses This")
+        st.subheader("How Elder Edwards Uses This")
         st.markdown("""
         **Weekly Workflow:**
         
