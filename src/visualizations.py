@@ -6,6 +6,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
+from typing import Dict
 from bertopic import BERTopic
 from sklearn.metrics.pairwise import cosine_similarity
 from typing import Optional
@@ -117,7 +118,7 @@ def display_topic_distribution_chart(df: pd.DataFrame, chart_key: str = "topic_d
     st.info("🔍 **Quick Insight:** The leftmost (tallest) bars show the most common question topics. The rightmost (shortest) bars are rare topics that only a few students ask about.")
 
 
-def display_topic_hierarchy(topic_model: BERTopic):
+def display_topic_hierarchy(topic_model: BERTopic, topic_names: Dict[int, str] = None):
     """Display topic hierarchy visualization"""
     create_chart_header(
         "🌳 Topic Hierarchy & Clustering", 
@@ -136,7 +137,7 @@ def display_topic_hierarchy(topic_model: BERTopic):
         st.error(f"Could not create hierarchy visualization: {str(e)}")
 
 
-def display_topic_similarity_heatmap(topic_model: BERTopic):
+def display_topic_similarity_heatmap(topic_model: BERTopic, topic_names: Dict[int, str] = None):
     """Display topic similarity heatmap"""
     create_chart_header(
         "🔥 Topic Similarity Heatmap", 
@@ -150,10 +151,19 @@ def display_topic_similarity_heatmap(topic_model: BERTopic):
             topic_embeddings = topic_model.topic_embeddings_
             similarity_matrix = cosine_similarity(topic_embeddings)
             
-            # Get topic names
-            topic_info = topic_model.get_topic_info()
-            topic_names = [f"Topic {i}: {name[:30]}..." if len(name) > 30 else f"Topic {i}: {name}" 
-                         for i, name in enumerate(topic_info['Name'][:20])]  # Limit to top 20
+            # Get topic names - use generated names if available, otherwise fall back to BERTopic names
+            if topic_names:
+                display_names = []
+                for i in range(min(20, len(topic_model.get_topic_info()))):
+                    if i in topic_names:
+                        name = topic_names[i]
+                        display_names.append(name[:30] + "..." if len(name) > 30 else name)
+                    else:
+                        display_names.append(f"Topic {i}")
+            else:
+                topic_info = topic_model.get_topic_info()
+                display_names = [f"Topic {i}: {name[:30]}..." if len(name) > 30 else f"Topic {i}: {name}" 
+                             for i, name in enumerate(topic_info['Name'][:20])]  # Limit to top 20
             
             if len(similarity_matrix) > 20:
                 similarity_matrix = similarity_matrix[:20, :20]
@@ -161,8 +171,8 @@ def display_topic_similarity_heatmap(topic_model: BERTopic):
             fig_heatmap = px.imshow(
                 similarity_matrix,
                 labels=dict(x="Topics", y="Topics", color="Similarity"),
-                x=topic_names,
-                y=topic_names,
+                x=display_names,
+                y=display_names,
                 title="Topic Similarity Matrix",
                 color_continuous_scale='RdYlBu_r',
                 aspect="auto"
@@ -226,8 +236,8 @@ def display_confidence_distribution(df: pd.DataFrame):
     st.success("🎯 **Reading Box Plots:** Higher boxes = more confident topics | Skinnier boxes = more consistent confidence | Dots outside boxes = unusual scores")
 
 
-def display_topic_words_chart(topic_model: BERTopic):
-    """Display top words for each topic"""
+def display_topic_words_chart(topic_model: BERTopic, topic_names: Dict[int, str] = None):
+    """Display top words for each topic using generated topic names"""
     create_chart_header(
         "🔤 Top Words by Topic", 
         "These are the most important words that define each topic! Think of them as hashtags or keywords - they tell you what each topic is really about. Longer bars mean more important words for that topic. If you see weird words, the AI might need better training!"
@@ -243,9 +253,16 @@ def display_topic_words_chart(topic_model: BERTopic):
         word_data = []
         for topic_id in topics_to_show:
             words = topic_model.get_topic(topic_id)[:8]  # Top 8 words
+            
+            # Use generated topic name if available, otherwise fall back to Topic ID
+            if topic_names and topic_id in topic_names:
+                topic_label = topic_names[topic_id]
+            else:
+                topic_label = f"Topic {topic_id}"
+                
             for word, score in words:
                 word_data.append({
-                    'Topic': f"Topic {topic_id}",
+                    'Topic': topic_label,
                     'Word': word,
                     'Score': score
                 })
@@ -268,7 +285,7 @@ def display_topic_words_chart(topic_model: BERTopic):
                 yaxis={'categoryorder': 'total ascending'}
             )
             
-            st.plotly_chart(fig, use_container_width=True, key="topic_words_chart")
+            st.plotly_chart(fig, width="stretch", key="topic_words_chart")
             
             st.info("🔍 **Pro Tip:** Look for words that make sense together! If you see random words mixed together, that topic might need to be split into smaller, more focused topics.")
             

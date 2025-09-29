@@ -20,7 +20,7 @@ try:
     from config import CUSTOM_CSS, PAGE_TITLE, PAGE_ICON, LAYOUT
     from enhanced_components import (
         display_header, check_api_key, create_hybrid_processing_tab,
-        display_hybrid_results, create_topic_management_tab, display_app_footer
+        display_hybrid_results, display_app_footer
     )
     from utils import create_session_state_defaults
 except ImportError as e:
@@ -93,9 +93,9 @@ def configure_page():
 def create_sidebar():
     """Create enhanced sidebar with configuration options"""
     with st.sidebar:
-        st.image("https://www.byupathway.org/content/dam/byupathway/site-images/logo-circle-pathway.png", width=100)
+        st.image("https://byu-pathway.brightspotcdn.com/42/2e/4d4c7b10498c84233ae51179437c/byu-pw-icon-gold-rgb-1-1.svg", width=100)
         
-        st.markdown("### 🎓 BYU Pathway")
+        st.markdown("### BYU Pathway")
         st.markdown("### Hybrid Topic Analysis")
         
         st.markdown("---")
@@ -162,9 +162,8 @@ def main():
     # Main application tabs
     if 'hybrid_results' in st.session_state and st.session_state['hybrid_results']:
         # Post-analysis: Show results and management tools
-        tab1, tab2, tab3 = st.tabs([
+        tab1, tab2 = st.tabs([
             "📊 **Analysis Results**",
-            "📝 **Topic Management**", 
             "🚀 **New Analysis**"
         ])
         
@@ -172,9 +171,6 @@ def main():
             display_hybrid_results(st.session_state['hybrid_results'])
         
         with tab2:
-            create_topic_management_tab()
-        
-        with tab3:
             create_hybrid_processing_tab()
     
     else:
@@ -260,10 +256,10 @@ def display_about_tab():
     with features_col3:
         st.markdown("""
         **📝 Management Tools**
-        - Topic editor interface
-        - Bulk operations
-        - Change confirmation
-        - Real-time sync
+        - View and download results
+        - Export to CSV
+        - Analysis statistics
+        - Real-time processing
         """)
     
     st.subheader("📁 Output Files")

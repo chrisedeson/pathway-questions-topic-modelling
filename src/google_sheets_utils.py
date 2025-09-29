@@ -17,10 +17,10 @@ from config import GOOGLE_SHEETS_CREDENTIALS_PATH
 logger = logging.getLogger(__name__)
 
 class SheetsPermission:
-    """Enum for Google Sheets permissions"""
-    READ_ONLY = "read"
-    EDIT = "edit" 
-    NO_ACCESS = "none"
+    """Enum for Google Sheets permission levels"""
+    NO_ACCESS = "no_access"
+    READ_ONLY = "read_only"
+
 
 class GoogleSheetsManager:
     """Manages Google Sheets integration with error handling and permission checking"""
@@ -97,18 +97,7 @@ class GoogleSheetsManager:
             # Test read access
             try:
                 test_read = self._make_api_call(worksheet.cell, 1, 1)
-                
-                # Test write access by attempting a safe write operation
-                try:
-                    original_value = test_read.value if test_read.value else ""
-                    self._make_api_call(worksheet.update_cell, 1, 1, "TEMP_PERMISSION_CHECK")
-                    self._make_api_call(worksheet.update_cell, 1, 1, original_value)
-                    return SheetsPermission.EDIT, None
-                    
-                except APIError as e:
-                    if "insufficientPermissions" in str(e) or "forbidden" in str(e).lower():
-                        return SheetsPermission.READ_ONLY, None
-                    raise e
+                return SheetsPermission.READ_ONLY, None
                     
             except APIError as e:
                 if "insufficientPermissions" in str(e) or "forbidden" in str(e).lower():
@@ -124,15 +113,10 @@ class GoogleSheetsManager:
     
     def read_topics_from_sheet(self, sheet_url: str, worksheet_name: str = None) -> Tuple[Optional[pd.DataFrame], Optional[str]]:
         """
-        Read topics, subtopics, and questions from Google Sheet
-        
-        Expected format:
-        | Topic | Subtopic | Question |
-        |-------|----------|----------|
-        | ...   | ...      | ...      |
+        Read topics data from Google Sheet with Topic, Subtopic, Question columns
         
         Returns:
-            Tuple[Optional[pd.DataFrame], Optional[str]]: DataFrame and error message if any
+            Tuple[Optional[pd.DataFrame], Optional[str]]: (DataFrame, error_message)
         """
         if not self.client and not self._initialize_client():
             return None, self.last_error
@@ -144,6 +128,7 @@ class GoogleSheetsManager:
             
             sheet = self._make_api_call(self.client.open_by_key, spreadsheet_id)
             
+            # Get specific worksheet if specified
             if worksheet_name:
                 try:
                     worksheet = sheet.worksheet(worksheet_name)
@@ -167,7 +152,7 @@ class GoogleSheetsManager:
             df = df.dropna(how='all')  # Remove completely empty rows
             df = df.fillna('')  # Replace NaN with empty string
             
-            # Validate expected columns
+            # Validate expected columns for topics
             required_columns = ['Topic', 'Subtopic', 'Question']
             missing_columns = [col for col in required_columns if col not in df.columns]
             
@@ -180,91 +165,87 @@ class GoogleSheetsManager:
             error_msg = f"Error reading from Google Sheet: {str(e)}"
             logger.error(error_msg)
             return None, error_msg
-    
-    def write_topics_to_sheet(self, sheet_url: str, df: pd.DataFrame, worksheet_name: str = None) -> Optional[str]:
+
+    def read_questions_from_sheet(self, sheet_url: str, worksheet_name: str = None) -> Tuple[Optional[pd.DataFrame], Optional[str]]:
         """
-        Write topics DataFrame back to Google Sheet
+        Read questions data from Google Sheet - expects either:
+        1. Simple list in first column
+        2. CSV with 'question' column
         
         Returns:
-            Optional[str]: Error message if any, None if successful
+            Tuple[Optional[pd.DataFrame], Optional[str]]: (DataFrame, error_message)
         """
         if not self.client and not self._initialize_client():
-            return self.last_error
+            return None, self.last_error
             
         try:
             spreadsheet_id = self.extract_spreadsheet_id(sheet_url)
             if not spreadsheet_id:
-                return "Invalid Google Sheets URL"
+                return None, "Invalid Google Sheets URL"
             
             sheet = self._make_api_call(self.client.open_by_key, spreadsheet_id)
             
+            # Get specific worksheet if specified
             if worksheet_name:
                 try:
                     worksheet = sheet.worksheet(worksheet_name)
                 except WorksheetNotFound:
-                    return f"Worksheet '{worksheet_name}' not found"
+                    return None, f"Worksheet '{worksheet_name}' not found"
             else:
                 worksheet = sheet.sheet1
             
-            # Clear existing content
-            self._make_api_call(worksheet.clear)
+            # Get all values
+            data = self._make_api_call(worksheet.get_all_values)
             
-            # Prepare data with headers
-            values = [df.columns.tolist()] + df.values.tolist()
+            if not data:
+                return None, "Sheet is empty"
             
-            # Update sheet with new data
-            self._make_api_call(worksheet.update, 'A1', values)
+            # Convert to DataFrame
+            if len(data) == 1 or not data[0]:  # No headers or single row
+                # Treat as simple list
+                questions = [row[0] for row in data if row and row[0].strip()]
+                df = pd.DataFrame({'question': questions})
+            else:
+                # Try to parse as CSV with headers
+                headers = data[0]
+                rows = data[1:] if len(data) > 1 else []
+                df = pd.DataFrame(rows, columns=headers)
+                
+                # Clean up the DataFrame
+                df = df.dropna(how='all')  # Remove completely empty rows
+                df = df.fillna('')  # Replace NaN with empty string
+                
+                # Check if we have a 'question' column
+                if 'question' in df.columns:
+                    # Use existing question column
+                    df = df[['question']].copy()
+                elif len(df.columns) >= 1:
+                    # Use first column as questions
+                    df = pd.DataFrame({'question': df.iloc[:, 0]})
+                else:
+                    return None, "No question data found in sheet"
             
-            return None  # Success
+            # Remove empty questions
+            df = df[df['question'].notna() & (df['question'].str.strip() != '')]
+            
+            if len(df) == 0:
+                return None, "No valid questions found in sheet"
+            
+            return df, None
             
         except Exception as e:
-            error_msg = f"Error writing to Google Sheet: {str(e)}"
+            error_msg = f"Error reading questions from Google Sheet: {str(e)}"
             logger.error(error_msg)
-            return error_msg
+            return None, error_msg
     
-    def append_to_sheet(self, sheet_url: str, data: List[List], worksheet_name: str = None) -> Optional[str]:
-        """
-        Append rows to Google Sheet
-        
-        Returns:
-            Optional[str]: Error message if any, None if successful
-        """
-        if not self.client and not self._initialize_client():
-            return self.last_error
-            
-        try:
-            spreadsheet_id = self.extract_spreadsheet_id(sheet_url)
-            if not spreadsheet_id:
-                return "Invalid Google Sheets URL"
-            
-            sheet = self._make_api_call(self.client.open_by_key, spreadsheet_id)
-            
-            if worksheet_name:
-                try:
-                    worksheet = sheet.worksheet(worksheet_name)
-                except WorksheetNotFound:
-                    return f"Worksheet '{worksheet_name}' not found"
-            else:
-                worksheet = sheet.sheet1
-            
-            # Append rows
-            for row in data:
-                self._make_api_call(worksheet.append_row, row)
-            
-            return None  # Success
-            
-        except Exception as e:
-            error_msg = f"Error appending to Google Sheet: {str(e)}"
-            logger.error(error_msg)
-            return error_msg
+
+    
+
 
 def display_sheets_permission_status(permission: SheetsPermission, error_msg: str = None):
     """Display Google Sheets permission status in Streamlit UI"""
-    if permission == SheetsPermission.EDIT:
-        st.success("✅ **Full Access**: Can read and edit Google Sheet")
-    elif permission == SheetsPermission.READ_ONLY:
-        st.warning("⚠️ **Read-Only Access**: Can view but cannot edit Google Sheet")
-        st.info("💡 **Tip**: To enable editing, share the sheet with your service account email with 'Editor' permissions")
+    if permission == SheetsPermission.READ_ONLY:
+        st.success("✅ **Read Access**: Can view Google Sheet")
     else:
         st.error("❌ **No Access**: Cannot access Google Sheet")
         if error_msg:
@@ -278,9 +259,7 @@ def display_sheets_permission_status(permission: SheetsPermission, error_msg: st
             2. **Open your Google Sheet** in a browser
             3. **Click 'Share'** button (top right)
             4. **Add the service account email** 
-            5. **Set permission level**:
-               - **Viewer** = Read-only access
-               - **Editor** = Full read/write access
+            5. **Set permission level to Viewer** for read access
             6. **Click 'Send'**
             
             **Alternative**: Make sheet public by clicking 'Change to anyone with the link' and selecting appropriate access level.

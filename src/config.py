@@ -44,7 +44,7 @@ DATA_DIR = "data"
 
 # UI Configuration
 PAGE_TITLE = "BYU Pathway Hybrid Topic Analysis"
-PAGE_ICON = "🎓"
+PAGE_ICON = ""
 LAYOUT = "wide"
 
 # Custom CSS styles
@@ -146,9 +146,35 @@ CUSTOM_CSS = """
         border: 1px solid #30363d !important;
     }
     
-    [data-theme="dark"] .stSelectbox div[role="option"] {
+        [data-theme="dark"] .stSelectbox div[role="option"] {
         background-color: #262730 !important;
         color: #fafafa !important;
+    }
+    
+    /* Number input styling fixes */
+    .stNumberInput > div > div > input {
+        background-color: var(--background-color, white) !important;
+        color: var(--text-color, #262730) !important;
+        border: 1px solid var(--border-color, #d1d5db) !important;
+    }
+    
+    [data-theme="dark"] .stNumberInput > div > div > input {
+        background-color: #262730 !important;
+        color: #fafafa !important;
+        border: 1px solid #30363d !important;
+    }
+    
+    /* Button styling for better contrast */
+    .stNumberInput button {
+        background-color: var(--secondary-background-color, #f8f9fa) !important;
+        color: var(--text-color, #262730) !important;
+        border: 1px solid var(--border-color, #d1d5db) !important;
+    }
+    
+    [data-theme="dark"] .stNumberInput button {
+        background-color: #30363d !important;
+        color: #fafafa !important;
+        border: 1px solid #30363d !important;
     }
 </style>
 """

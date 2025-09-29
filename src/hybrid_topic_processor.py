@@ -69,54 +69,75 @@ class HybridTopicProcessor:
             logger.info(f"Caching enabled: {CACHE_DIR}")
         else:
             logger.info("Caching disabled")
+        
+        # Initialize batch cache
+        self._batch_cache = None
+        self._batch_cache_path = os.path.join(CACHE_DIR, "batch_embeddings_cache.pkl")
+        self._cache_modified = False
     
-    def get_cache_path(self, text: str, model: str) -> str:
-        """Generate cache file path for a given text and model"""
-        text_hash = hashlib.md5(text.encode()).hexdigest()[:12]
-        return os.path.join(CACHE_DIR, f"{model}_{text_hash}.pkl")
+    def _load_batch_cache(self):
+        """Load the batch cache from disk"""
+        if self._batch_cache is not None:
+            return
+        
+        if os.path.exists(self._batch_cache_path):
+            try:
+                with open(self._batch_cache_path, 'rb') as f:
+                    self._batch_cache = pickle.load(f)
+                logger.info(f"Loaded batch cache with {sum(len(model_cache) for model_cache in self._batch_cache.values())} embeddings")
+            except Exception as e:
+                logger.warning(f"Failed to load batch cache: {e}")
+                self._batch_cache = {}
+        else:
+            self._batch_cache = {}
+    
+    def _save_batch_cache(self):
+        """Save the batch cache to disk if modified"""
+        if not self._cache_modified or not CACHE_EMBEDDINGS:
+            return
+        
+        try:
+            with open(self._batch_cache_path, 'wb') as f:
+                pickle.dump(self._batch_cache, f)
+            self._cache_modified = False
+            logger.debug("Batch cache saved")
+        except Exception as e:
+            logger.warning(f"Failed to save batch cache: {e}")
+    
+    def get_cache_key(self, text: str, model: str) -> str:
+        """Generate cache key for text and model"""
+        return hashlib.md5(text.encode('utf-8')).hexdigest()[:12]
     
     def load_cached_embedding(self, text: str, model: str) -> Optional[List[float]]:
-        """Load embedding from cache if available"""
-        if not CACHE_EMBEDDINGS or not CACHE_DIR:
+        """Load embedding from batch cache"""
+        if not CACHE_EMBEDDINGS:
             return None
         
-        cache_path = self.get_cache_path(text, model)
-        if os.path.exists(cache_path):
-            try:
-                with open(cache_path, 'rb') as f:
-                    return pickle.load(f)
-            except Exception as e:
-                logger.debug(f"Cache read error for {cache_path}: {e}")
+        self._load_batch_cache()
+        cache_key = self.get_cache_key(text, model)
+        
+        if model in self._batch_cache and cache_key in self._batch_cache[model]:
+            return self._batch_cache[model][cache_key]
+        
         return None
     
     def save_embedding_to_cache(self, text: str, model: str, embedding: List[float]):
-        """Save embedding to cache with automatic directory creation"""
-        if not CACHE_EMBEDDINGS or not CACHE_DIR:
+        """Save embedding to batch cache"""
+        if not CACHE_EMBEDDINGS:
             return
         
-        cache_path = self.get_cache_path(text, model)
-        try:
-            with open(cache_path, 'wb') as f:
-                pickle.dump(embedding, f)
-        except Exception as e:
-            if not hasattr(self.save_embedding_to_cache, '_error_shown'):
-                logger.warning(f"Cache write disabled due to error: {e}")
-                self.save_embedding_to_cache._error_shown = True
-    
-    def clean_question(self, question: str) -> str:
-        """Remove ACM question prefix from questions before processing"""
-        if not isinstance(question, str):
-            return str(question) if question is not None else ""
+        self._load_batch_cache()
+        cache_key = self.get_cache_key(text, model)
         
-        import re
-        # Pattern to match ACM prefixes (case-insensitive)
-        pattern = r'^\s*\(ACMs?\s+[Qq]uestion\)\s*:?\s*'
-        cleaned = re.sub(pattern, '', question, flags=re.IGNORECASE).strip()
-        return cleaned if cleaned else question
+        if model not in self._batch_cache:
+            self._batch_cache[model] = {}
         
-        # Create cache directory if needed
-        if CACHE_EMBEDDINGS:
-            Path(CACHE_DIR).mkdir(parents=True, exist_ok=True)
+        self._batch_cache[model][cache_key] = embedding
+        self._cache_modified = True
+        
+        # Save periodically to avoid memory issues
+        if len(self._batch_cache.get(model, {})) % 100 == 0:
+            self._save_batch_cache()
     
     def clean_question(self, question: str) -> str:
         """Remove ACM question prefix from questions before processing"""
@@ -126,10 +147,10 @@ class HybridTopicProcessor:
         # Define patterns to match ACM prefixes (case-insensitive)
         import re
         acm_patterns = [
-            r'^\(ACM[s]?\s+[Qq]uestion\):?\s*',
-            r'^\(ACM[s]?\s+[Qq]uestions?\):?\s*',
-            r'^ACM[s]?\s+[Qq]uestion:?\s*',
-            r'^ACM[s]?\s+[Qq]uestions?:?\s*'
+            r'^\s*\(ACMs?\s+[Qq]uestion\)\s*:?\s*',
+            r'^\s*\(ACMs?\s+[Qq]uestions?\)\s*:?\s*',
+            r'^\s*ACMs?\s+[Qq]uestion:?\s*',
+            r'^\s*ACMs?\s+[Qq]uestions?:?\s*'
         ]
         
         cleaned = question
@@ -153,38 +174,6 @@ class HybridTopicProcessor:
         df = df.drop_duplicates(subset=[question_column])
         
         return df.reset_index(drop=True)
-    
-    def get_cache_path(self, text: str, model: str) -> str:
-        """Generate cache path for embedding"""
-        text_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
-        model_clean = model.replace('/', '_')
-        return os.path.join(CACHE_DIR, f"{model_clean}_{text_hash}.pkl")
-    
-    def load_cached_embedding(self, text: str, model: str) -> Optional[List[float]]:
-        """Load embedding from cache"""
-        if not CACHE_EMBEDDINGS:
-            return None
-            
-        cache_path = self.get_cache_path(text, model)
-        if os.path.exists(cache_path):
-            try:
-                with open(cache_path, 'rb') as f:
-                    return pickle.load(f)
-            except Exception as e:
-                logger.warning(f"Failed to load cached embedding: {e}")
-        return None
-    
-    def save_embedding_to_cache(self, text: str, model: str, embedding: List[float]):
-        """Save embedding to cache"""
-        if not CACHE_EMBEDDINGS:
-            return
-            
-        cache_path = self.get_cache_path(text, model)
-        try:
-            with open(cache_path, 'wb') as f:
-                pickle.dump(embedding, f)
-        except Exception as e:
-            logger.warning(f"Failed to save embedding to cache: {e}")
     
     @backoff.on_exception(
         backoff.expo,
@@ -428,18 +417,18 @@ class HybridTopicProcessor:
 
         return similar_questions_df, remaining_questions_df
     
-    def perform_clustering_analysis(self, remaining_questions_df: pd.DataFrame) -> tuple[Optional[pd.DataFrame], Optional[BERTopic], Optional[np.ndarray]]:
-        """Perform clustering analysis on remaining questions"""
+    def perform_clustering_analysis(self, remaining_questions_df: pd.DataFrame) -> tuple[Optional[pd.DataFrame], Optional[BERTopic]]:
+        """Perform clustering analysis on remaining questions - returns tuple like insights"""
         
         if len(remaining_questions_df) == 0:
-            return None, None, None
+            return None, None
             
         st.info("🎯 **Step 2: Clustering-Based Topic Discovery**")
         st.write("Finding new topics in unmatched questions...")
         
         # Get embeddings for remaining questions
         questions = remaining_questions_df['question'].tolist()
-        embeddings_list = self.get_embeddings_batch(questions)
+        embeddings_list = remaining_questions_df['embedding'].tolist() if 'embedding' in remaining_questions_df.columns else self.get_embeddings_batch(questions)
         
         # Convert to numpy array for BERTopic
         import numpy as np
@@ -472,6 +461,7 @@ class HybridTopicProcessor:
             
             # Create BERTopic model
             topic_model = BERTopic(
+                embedding_model=None,  # Use our precomputed embeddings
                 umap_model=umap_model,
                 hdbscan_model=hdbscan_model,
                 verbose=False
@@ -480,15 +470,31 @@ class HybridTopicProcessor:
             # Fit the model
             topics, probs = topic_model.fit_transform(questions, embeddings)
             
-            # Add cluster information to DataFrame
-            clustered_df = remaining_questions_df.copy()
-            clustered_df['cluster_id'] = topics
-            clustered_df['probability'] = probs
+            # Get topic information like insights
+            topic_info = topic_model.get_topic_info()
             
-            # Also keep the manual clustering for backward compatibility
-            reduced_embeddings = umap_model.fit_transform(embeddings)
-            clustered_df['umap_x'] = reduced_embeddings[:, 0]
-            clustered_df['umap_y'] = reduced_embeddings[:, 1]
+            # Create results DataFrame exactly like insights
+            clustered_df = pd.DataFrame({
+                'question': questions,
+                'cluster_id': topics,  # Use topics as cluster_id
+                'topic_id': topics,
+                'cluster_probability': probs if probs is not None else [1.0] * len(questions)
+            })
+            
+            # Filter out noise points (cluster_id == -1) like insights
+            clustered_df = clustered_df[clustered_df['cluster_id'] != -1]
+            
+            # Add topic keywords like insights
+            topic_map = topic_info.set_index("Topic")["Representation"].to_dict()
+            
+            def get_topic_keywords(topic_id):
+                """Extract keywords from topic representation"""
+                rep = topic_map.get(topic_id, [])
+                if isinstance(rep, list) and len(rep) > 0:
+                    return ", ".join(rep[:5])  # Top 5 keywords
+                return "Unknown"
+            
+            clustered_df['topic_keywords'] = clustered_df['topic_id'].apply(get_topic_keywords)
             
         except Exception as e:
             st.warning(f"Could not create BERTopic model: {e}. Falling back to manual clustering.")
@@ -510,25 +516,25 @@ class HybridTopicProcessor:
             cluster_labels = hdbscan_model.fit_predict(reduced_embeddings)
             
             # Add cluster information to DataFrame
-            clustered_df = remaining_questions_df.copy()
-            clustered_df['cluster_id'] = cluster_labels
-            clustered_df['probability'] = [0.5] * len(cluster_labels)  # Default probability
-            clustered_df['umap_x'] = reduced_embeddings[:, 0]
-            clustered_df['umap_y'] = reduced_embeddings[:, 1]
+            clustered_df = pd.DataFrame({
+                'question': questions,
+                'cluster_id': cluster_labels,
+                'topic_id': cluster_labels,
+                'cluster_probability': [0.5] * len(cluster_labels),  # Default probability
+                'topic_keywords': ['unknown'] * len(cluster_labels)
+            })
+            
+            # Filter out noise points
+            clustered_df = clustered_df[clustered_df['cluster_id'] != -1]
         
-        # Filter out noise points (cluster_id == -1)
-        valid_clusters_df = clustered_df[clustered_df['cluster_id'] != -1]
+        cluster_labels = clustered_df['cluster_id'].tolist() if len(clustered_df) > 0 else []
+        n_clusters = len(set(cluster_labels)) if cluster_labels else 0
         
-        cluster_labels = clustered_df['cluster_id'].tolist()
-        n_clusters = len(set(cluster_labels)) - (1 if -1 in cluster_labels else 0)
-        n_noise = sum(1 for label in cluster_labels if label == -1)
-        
-        st.success(f"✅ Found {n_clusters} new topic clusters ({n_noise} noise points)")
+        st.success(f"✅ Found {n_clusters} new topic clusters")
         
         return (
-            valid_clusters_df if len(valid_clusters_df) > 0 else None,
-            topic_model,
-            np.array(embeddings) if embeddings is not None and len(embeddings) > 0 else None
+            clustered_df if len(clustered_df) > 0 else None,
+            topic_model
         )
     
     @backoff.on_exception(
@@ -545,44 +551,76 @@ class HybridTopicProcessor:
         base=2,
         max_value=60
     )
-    async def generate_topic_name(self, questions: List[str]) -> str:
+    async def generate_topic_name(self, questions: List[str], keywords: str = "") -> str:
         """Generate a topic name using GPT for a cluster of questions"""
         
-        # Select representative questions (up to 5)
-        sample_questions = questions[:5] if len(questions) > 5 else questions
+        # Limit to top 10 questions for context (exactly like insights)
+        sample_questions = questions[:10]
         questions_text = "\n".join([f"- {q}" for q in sample_questions])
-        
-        prompt = f"""Analyze these student questions and generate a concise, descriptive topic name (2-4 words max).
 
-Questions:
+        prompt = f"""
+    Based on the following student questions and keywords, generate a concise, descriptive topic name.
+
+QUESTIONS:
 {questions_text}
 
-Generate a topic name that captures the common theme. Response format: just the topic name, nothing else.
+KEYWORDS: {keywords}
 
-Examples of good topic names:
-- "Technical Support"
-- "Course Registration"  
-- "Academic Policies"
-- "Financial Aid"
-- "Study Resources"
+Instructions:
+- Your answer must be ONLY the topic name (2–8 words), no extra text.
+- It should clearly describe the shared theme of the questions.
+- Avoid generic labels like "General Questions" or "Miscellaneous."
+- Do not include "Topic name:" or quotation marks.
+- Use simple, natural English that sounds clear to a student or teacher.
 
-Topic name:"""
-        
+Example:
+Questions:
+- When does registration open?
+- What are the fall 2025 enrollment deadlines?
+Keywords: registration, deadlines
+
+Topic name: Fall 2025 Registration Deadlines
+
+Now generate the topic name for the questions above:
+"""
+
         try:
-            response = self.client.chat.completions.create(
+            messages = [
+                {"role": "system", "content": "You are an expert at creating clear, descriptive topic names for student question categories."},
+                {"role": "user", "content": prompt}
+            ]
+            
+            print(f"Calling GPT with model: {CHAT_MODEL}, keywords: '{keywords[:50]}...'")
+            
+            response = await self.async_client.chat.completions.create(
                 model=CHAT_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                max_completion_tokens=20
+                messages=messages,
+                max_completion_tokens=1000  # Match insights
             )
             
-            return response.choices[0].message.content.strip()
+            topic_name = response.choices[0].message.content.strip()
+            print(f"Raw GPT response: '{topic_name}'")
+            
+            # Clean up the response (exactly like insights)
+            topic_name = topic_name.replace("Topic name:", "").strip()
+            topic_name = topic_name.strip('"\'')
+            
+            if not topic_name:
+                topic_name = f"Topic: {keywords[:50]}" if keywords else f"Question Group {hash(str(questions[:3])) % 1000}"
+                print(f"Empty response, using fallback: '{topic_name}'")
+            
+            print(f"Final topic name: '{topic_name}' for {len(questions)} questions")
+            return topic_name
             
         except Exception as e:
             logger.error(f"Error generating topic name: {e}")
-            return f"Topic Cluster"
+            print(f"Exception occurred: {str(e)}")
+            fallback_name = f"Topic: {keywords[:50]}" if keywords else f"Topic Group {hash(str(questions[:3])) % 1000}"
+            print(f"Using fallback topic name: '{fallback_name}'")
+            return fallback_name
     
     async def generate_topic_names_for_clusters(self, clustered_questions_df: pd.DataFrame) -> Dict[int, str]:
-        """Generate topic names for all clusters"""
+        """Generate topic names for all clusters using topic_keywords from BERTopic like insights"""
         
         st.write("🤖 Generating topic names with GPT...")
         
@@ -592,21 +630,29 @@ Topic name:"""
         # Create semaphore to limit concurrent requests
         semaphore = asyncio.Semaphore(5)
         
-        async def generate_for_cluster(cluster_id, questions):
+        async def generate_for_cluster(cluster_id, cluster_data):
             async with semaphore:
-                topic_name = await self.generate_topic_name(questions)
+                questions = cluster_data['question'].tolist()
+                # Use topic_keywords from BERTopic if available (like insights)
+                keywords = cluster_data['topic_keywords'].iloc[0] if 'topic_keywords' in cluster_data.columns else ""
+                
+                topic_name = await self.generate_topic_name(questions, keywords)
                 return cluster_id, topic_name
         
         # Generate all topic names concurrently
         tasks = [
-            generate_for_cluster(cluster_id, group['question'].tolist())
+            generate_for_cluster(cluster_id, group)
             for cluster_id, group in cluster_groups
         ]
         
-        results = await asyncio.gather(*tasks)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
         
-        for cluster_id, topic_name in results:
-            topic_names[cluster_id] = topic_name
+        for result in results:
+            if isinstance(result, Exception):
+                logger.error(f"Error generating topic name: {result}")
+            else:
+                cluster_id, topic_name = result
+                topic_names[cluster_id] = topic_name
         
         return topic_names
     
@@ -707,55 +753,69 @@ Topic name:"""
         
         return file1_name, file2_name, file3_name
     
-    def prepare_evaluation_dataset(self, questions_df: pd.DataFrame, 
-                                   mode: str = PROCESSING_MODE, 
-                                   sample_size: int = SAMPLE_SIZE) -> pd.DataFrame:
-        """Prepare evaluation dataset based on processing mode"""
-        
-        if mode == "sample" and len(questions_df) > sample_size:
-            st.info(f"🎯 **Sample Mode**: Processing {sample_size} questions out of {len(questions_df)}")
-            return questions_df.sample(n=sample_size, random_state=RANDOM_SEED).reset_index(drop=True)
-        else:
-            st.info(f"🎯 **Full Mode**: Processing all {len(questions_df)} questions")
-            return questions_df
-    
+
     async def process_hybrid_analysis(self, 
                                       questions_df: pd.DataFrame,
                                       topic_questions_df: pd.DataFrame,
                                       threshold: float = SIMILARITY_THRESHOLD,
-                                      processing_mode: str = "full") -> Dict[str, Any]:
-        """Run complete hybrid topic analysis"""
+                                      processing_mode: str = "sample",
+                                      sample_size: int = SAMPLE_SIZE) -> Dict[str, Any]:
+        """Run complete hybrid topic analysis - matches insights flow exactly"""
         
         st.header("🚀 Hybrid Topic Analysis")
         
-        # Prepare evaluation dataset
-        eval_questions_df = self.prepare_evaluation_dataset(questions_df, processing_mode, getattr(self, 'sample_size', SAMPLE_SIZE))
+        # Step 1: Prepare evaluation dataset (like insights)
+        if processing_mode == "sample":
+            eval_questions_df = questions_df.sample(
+                n=min(sample_size, len(questions_df)),
+                random_state=RANDOM_SEED
+            ).copy()
+            st.info(f"🎯 **Sample Mode**: Processing {len(eval_questions_df)} questions (random sample)")
+        else:
+            eval_questions_df = questions_df.copy()
+            st.info(f"🎯 **Full Mode**: Processing all {len(eval_questions_df)} questions")
         
-        # Step 1: Similarity-based classification
+        # Step 2: Similarity-based classification
         similar_questions_df, remaining_questions_df = self.classify_by_similarity(
             eval_questions_df, topic_questions_df, threshold
         )
         
-        # Step 2: Clustering-based topic discovery
-        clustered_questions_df, topic_model, embeddings = self.perform_clustering_analysis(remaining_questions_df)
+        # Step 3: Clustering-based topic discovery
+        clustering_result = self.perform_clustering_analysis(remaining_questions_df)
+        if clustering_result[0] is not None:
+            clustered_questions_df, topic_model = clustering_result
+        else:
+            clustered_questions_df = None
+            topic_model = None
         
-        # Step 3: Generate topic names
+        # Step 4: Generate topic names
         topic_names = {}
         if clustered_questions_df is not None:
             st.info("🤖 **Generating topic names...**")
             topic_names = await self.generate_topic_names_for_clusters(clustered_questions_df)
         
-        # Step 4: Select representative questions  
+        # Step 5: Select representative questions  
         representative_questions = {}
         if clustered_questions_df is not None:
+            # Add embeddings for centroid method like insights
+            if REPRESENTATIVE_QUESTION_METHOD == "centroid" and 'embedding' not in clustered_questions_df.columns:
+                question_to_embedding = dict(zip(
+                    remaining_questions_df['question'],
+                    remaining_questions_df['embedding']
+                ))
+                clustered_questions_df['embedding'] = clustered_questions_df['question'].map(question_to_embedding)
+            
             representative_questions = self.select_representative_questions(clustered_questions_df)
         
-        # Step 5: Create output files
+        # Step 6: Create output files
         st.info("📁 **Creating output files...**")
         file1, file2, file3 = self.create_output_files(
             similar_questions_df, clustered_questions_df, 
             topic_names, representative_questions
         )
+        
+        # Ensure batch cache is saved
+        self._save_batch_cache()
         
         return {
             'similar_questions_df': similar_questions_df,
@@ -765,7 +825,11 @@ Topic name:"""
             'output_files': [file1, file2, file3],
             'eval_questions_df': eval_questions_df,
             'topic_model': topic_model,
-            'embeddings': embeddings,
             'similarity_threshold': threshold,
             'processing_mode': processing_mode
         }
+    
+    def __del__(self):
+        """Cleanup: ensure cache is saved when object is destroyed"""
+        if hasattr(self, '_cache_modified') and self._cache_modified:
+            self._save_batch_cache()

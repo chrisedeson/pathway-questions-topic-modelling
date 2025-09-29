@@ -26,10 +26,6 @@ from google_sheets_utils import (
     GoogleSheetsManager, display_sheets_permission_status,
     create_sheets_connection_ui, SheetsPermission
 )
-from topic_management import (
-    create_topic_editor_ui, create_changes_confirmation_dialog,
-    display_topic_statistics, create_similarity_threshold_ui
-)
 from hybrid_topic_processor import HybridTopicProcessor
 from config import GOOGLE_SHEETS_AUTO_REFRESH_INTERVAL
 
@@ -53,7 +49,7 @@ def create_chart_header(title: str, explanation: str, icon: str = "❔"):
 
 def display_header():
     """Display app header with styling"""
-    st.markdown('<h1 class="main-header" style="margin-bottom: 0.5rem;">🎓 BYU Pathway Hybrid Topic Analysis</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header" style="margin-bottom: 0.5rem;">BYU Pathway Hybrid Topic Analysis</h1>', unsafe_allow_html=True)
     st.markdown('<p class="sub-header" style="margin-bottom: 1rem;">AI-Powered Similarity Classification & Topic Discovery</p>', unsafe_allow_html=True)
 
 
@@ -165,6 +161,26 @@ def create_google_sheets_ui() -> Dict[str, Any]:
     
     result = {"source_type": "sheets", "questions_data": None, "topics_data": None}
     
+    # Centralized Service Account Information
+    st.info("📧 **Service Account**: `streamlit-sheets-reader@byu-pathway-chatbot.iam.gserviceaccount.com`")
+    
+    with st.expander("📋 **How to Share Your Google Sheets**", expanded=False):
+        st.markdown("""
+        **Step-by-step instructions for BOTH sheets:**
+        
+        1. **Open your Google Sheet** in a web browser
+        2. **Click the 'Share' button** (top right corner)
+        3. **Add this email**: `streamlit-sheets-reader@byu-pathway-chatbot.iam.gserviceaccount.com`
+        4. **Set permission to 'Viewer'** (read-only access)
+        5. **Click 'Send'** to grant access
+        
+        ⚠️ **Important**: Both sheets need to be shared with this service account.
+        
+        💡 **Alternative**: Make your sheets public by clicking "Anyone with the link" and setting to "Viewer".
+        """)
+    
+    st.markdown("---")
+    
     # Auto-refresh setup
     if st.checkbox("🔄 **Auto-refresh** (updates every 10 seconds)", value=False):
         st_autorefresh(interval=GOOGLE_SHEETS_AUTO_REFRESH_INTERVAL * 1000, key="sheets_refresh")
@@ -198,7 +214,7 @@ def create_google_sheets_ui() -> Dict[str, Any]:
             if permission != SheetsPermission.NO_ACCESS:
                 try:
                     # Try to read questions sheet
-                    questions_df, error_msg = sheets_manager.read_topics_from_sheet(questions_url, questions_worksheet)
+                    questions_df, error_msg = sheets_manager.read_questions_from_sheet(questions_url, questions_worksheet)
                     
                     if questions_df is not None:
                         # Check if it has a 'question' column or try to find questions
@@ -221,7 +237,7 @@ def create_google_sheets_ui() -> Dict[str, Any]:
                             st.success(f"✅ Loaded {len(questions_data)} questions")
                             
                             with st.expander("📋 Questions Preview", expanded=False):
-                                st.dataframe(questions_data.head(), use_container_width=True)
+                                st.dataframe(questions_data.head(), width="stretch")
                     
                     elif error_msg:
                         st.error(f"Error reading questions sheet: {error_msg}")
@@ -266,10 +282,11 @@ def create_google_sheets_ui() -> Dict[str, Any]:
                             st.error(f"Missing required columns: {missing_columns}")
                         else:
                             result["topics_data"] = topics_df
+                            st.session_state['topics_data'] = topics_df  # Store in session state
                             st.success(f"✅ Loaded {len(topics_df)} topic questions")
                             
                             with st.expander("� Topics Preview", expanded=False):
-                                st.dataframe(topics_df.head(), use_container_width=True)
+                                st.dataframe(topics_df.head(), width="stretch")
                     
                     elif error_msg:
                         st.error(f"Error reading topics sheet: {error_msg}")
@@ -309,7 +326,9 @@ def create_hybrid_processing_tab():
         processing_mode = st.selectbox(
             "**Processing Mode**",
             ["sample", "all"],
-            help="Process all questions or a sample for testing"
+            index=0,
+            help="Process all questions or a sample for testing",
+            key="processing_mode_select"
         )
         
         if processing_mode == "sample":
@@ -338,7 +357,7 @@ def create_hybrid_processing_tab():
                 st.rerun()
     
     # Process button
-    if st.button("🚀 **Start Hybrid Analysis**", type="primary", use_container_width=True):
+    if st.button("🚀 **Start Hybrid Analysis**", type="primary", width="stretch"):
         if topics_df is None:
             topics_df = pd.DataFrame(columns=['Topic', 'Subtopic', 'Question'])
         
@@ -369,7 +388,7 @@ def run_hybrid_analysis(questions_df: pd.DataFrame,
         # Run analysis
         with st.spinner("Running hybrid analysis..."):
             result = asyncio.run(processor.process_hybrid_analysis(
-                questions_df, topics_df, threshold, mode
+                questions_df, topics_df, threshold, mode, sample_size
             ))
             
         return result
@@ -463,7 +482,7 @@ def display_similar_questions_tab(similar_df: pd.DataFrame):
 
 
 def display_new_topics_tab(clustered_df: Optional[pd.DataFrame], topic_names: Dict[int, str]):
-    """Display newly discovered topics"""
+    """Display newly discovered topics in an interactive table format"""
     
     st.subheader("🆕 Newly Discovered Topics")
     
@@ -471,32 +490,122 @@ def display_new_topics_tab(clustered_df: Optional[pd.DataFrame], topic_names: Di
         st.info("No new topics were discovered. All questions matched existing topics or were classified as noise.")
         return
     
-    # Topic summary
+    # Prepare data for the table
+    topic_summary_data = []
     cluster_groups = clustered_df.groupby('cluster_id')
     
     for cluster_id, group in cluster_groups:
-        topic_name = topic_names.get(cluster_id, f"Cluster {cluster_id}")
+        if cluster_id >= 0:  # Exclude noise cluster (-1)
+            topic_name = topic_names.get(cluster_id, f"Cluster {cluster_id}")
+            question_count = len(group)
+            
+            # Get representative questions (top 3)
+            representative_questions = group['question'].head(3).tolist()
+            sample_questions = "; ".join(representative_questions)
+            
+            # Truncate if too long
+            if len(sample_questions) > 200:
+                sample_questions = sample_questions[:200] + "..."
+            
+            topic_summary_data.append({
+                "Topic ID": cluster_id,
+                "Topic Name": topic_name,
+                "Question Count": question_count,
+                "Sample Questions": sample_questions
+            })
+    
+    if not topic_summary_data:
+        st.info("No valid topics were discovered (only noise clusters found).")
+        return
+    
+    # Create DataFrame for display
+    topics_df = pd.DataFrame(topic_summary_data)
+    
+    # Display metrics
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("📊 Total New Topics", len(topics_df))
+    with col2:
+        total_questions = topics_df["Question Count"].sum()
+        st.metric("🔢 Questions in New Topics", total_questions)
+    with col3:
+        avg_questions = round(topics_df["Question Count"].mean(), 1)
+        st.metric("📈 Avg Questions per Topic", avg_questions)
+    
+    st.markdown("---")
+    
+    # Interactive table with search and sorting
+    st.subheader("📋 Topics Overview")
+    
+    # Add search functionality
+    search_term = st.text_input("🔍 Search topics", placeholder="Search by topic name or sample questions...")
+    
+    if search_term:
+        # Filter based on search term
+        mask = (
+            topics_df["Topic Name"].str.contains(search_term, case=False, na=False) |
+            topics_df["Sample Questions"].str.contains(search_term, case=False, na=False)
+        )
+        filtered_df = topics_df[mask]
+    else:
+        filtered_df = topics_df
+    
+    # Sort options
+    col1, col2 = st.columns(2)
+    with col1:
+        sort_by = st.selectbox(
+            "📊 Sort by:",
+            ["Question Count", "Topic Name", "Topic ID"],
+            index=0
+        )
+    with col2:
+        sort_order = st.selectbox(
+            "📈 Order:",
+            ["Descending", "Ascending"],
+            index=0
+        )
+    
+    # Apply sorting
+    ascending = sort_order == "Ascending"
+    sorted_df = filtered_df.sort_values(by=sort_by, ascending=ascending)
+    
+    # Display the interactive table
+    if not sorted_df.empty:
+        st.dataframe(
+            sorted_df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Topic ID": st.column_config.NumberColumn("ID", width="small"),
+                "Topic Name": st.column_config.TextColumn("Topic Name", width="medium"),
+                "Question Count": st.column_config.NumberColumn("Questions", width="small"),
+                "Sample Questions": st.column_config.TextColumn("Sample Questions", width="large")
+            }
+        )
         
-        with st.expander(f"📂 **{topic_name}** ({len(group)} questions)", expanded=False):
+        # Detailed view option
+        st.markdown("---")
+        st.subheader("🔍 Detailed Topic View")
+        
+        selected_topic_id = st.selectbox(
+            "Select a topic to view all questions:",
+            options=sorted_df["Topic ID"].tolist(),
+            format_func=lambda x: f"Topic {x}: {topic_names.get(x, f'Cluster {x}')}"
+        )
+        
+        if selected_topic_id is not None:
+            selected_topic_name = topic_names.get(selected_topic_id, f"Cluster {selected_topic_id}")
+            topic_questions = clustered_df[clustered_df['cluster_id'] == selected_topic_id]['question'].tolist()
             
-            # Representative questions
-            st.write("**Sample Questions:**")
-            for i, question in enumerate(group['question'].head(5)):
-                st.write(f"{i+1}. {question}")
+            st.write(f"**📂 {selected_topic_name}** ({len(topic_questions)} questions)")
             
-            if len(group) > 5:
-                st.write(f"... and {len(group) - 5} more questions")
-            
-            # Action buttons for this topic
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                if st.button(f"✅ **Approve Topic**", key=f"approve_{cluster_id}"):
-                    st.success(f"Topic '{topic_name}' approved for addition!")
-            
-            with col2:
-                if st.button(f"❌ **Reject Topic**", key=f"reject_{cluster_id}"):
-                    st.warning(f"Topic '{topic_name}' rejected.")
+            # Display all questions in an expandable format
+            with st.expander(f"View all {len(topic_questions)} questions", expanded=False):
+                for i, question in enumerate(topic_questions, 1):
+                    st.write(f"{i}. {question}")
+    
+    else:
+        st.warning("No topics match your search criteria.")
 
 
 def display_output_files_tab(output_files: list):
@@ -528,7 +637,7 @@ def display_output_files_tab(output_files: list):
             try:
                 df = pd.read_csv(filepath)
                 st.write(f"**Preview** ({len(df)} rows):")
-                st.dataframe(df.head(10), use_container_width=True)
+                st.dataframe(df.head(10), width="stretch")
                 
                 # Download button
                 with open(filepath, 'rb') as f:
@@ -539,7 +648,7 @@ def display_output_files_tab(output_files: list):
                     data=file_data,
                     file_name=os.path.basename(filepath),
                     mime="text/csv",
-                    use_container_width=True
+                    width="stretch"
                 )
                 
             except Exception as e:
@@ -611,9 +720,10 @@ def display_visualizations_tab(results: Dict[str, Any]):
         st.write("### Topic Relationships")
         
         if topic_model is not None:
-            visualizations.display_topic_hierarchy(topic_model)
+            topic_names = results.get('topic_names', {})
+            visualizations.display_topic_hierarchy(topic_model, topic_names)
             st.divider()
-            visualizations.display_topic_similarity_heatmap(topic_model)
+            visualizations.display_topic_similarity_heatmap(topic_model, topic_names)
         else:
             st.info("Topic model not available for relationship analysis.")
     
@@ -621,7 +731,8 @@ def display_visualizations_tab(results: Dict[str, Any]):
         st.write("### Topic Keywords")
         
         if topic_model is not None:
-            visualizations.display_topic_words_chart(topic_model)
+            topic_names = results.get('topic_names', {})
+            visualizations.display_topic_words_chart(topic_model, topic_names)
         else:
             st.info("Topic model not available for keyword analysis.")
 
@@ -655,58 +766,13 @@ def display_analysis_details_tab(results: Dict[str, Any]):
     st.write(f"• **New topics discovered**: {len(set(clustered_df['cluster_id'])) if clustered_df is not None else 0}")
 
 
-def create_topic_management_tab():
-    """Create topic management interface"""
-    
-    st.header("📝 Topic Management")
-    
-    # Check if we have topics data
-    if 'topics_data' not in st.session_state or st.session_state['topics_data'] is None:
-        st.info("No topics data loaded. Please load data from the Hybrid Analysis tab first.")
-        return
-    
-    topics_df = st.session_state['topics_data']
-    
-    # Topic editor
-    edited_topics_df = create_topic_editor_ui(topics_df)
-    
-    # Check for changes and show confirmation dialog
-    if not topics_df.equals(edited_topics_df):
-        if create_changes_confirmation_dialog(topics_df, edited_topics_df):
-            # Apply changes
-            st.session_state['topics_data'] = edited_topics_df
-            st.success("✅ **Changes applied successfully!**")
-            
-            # If using Google Sheets, offer to sync back
-            if st.session_state.get('data_source_type') == 'sheets':
-                if st.button("🔄 **Sync Changes to Google Sheets**", type="primary"):
-                    sync_changes_to_sheets(edited_topics_df)
-            
-            st.rerun()
 
 
-def sync_changes_to_sheets(topics_df: pd.DataFrame):
-    """Sync changes back to Google Sheets"""
-    
-    sheet_url = st.session_state.get('current_sheet_url')
-    worksheet_name = st.session_state.get('current_worksheet_name')
-    
-    if not sheet_url:
-        st.error("No Google Sheet URL found.")
-        return
-    
-    try:
-        with st.spinner("Syncing changes to Google Sheets..."):
-            sheets_manager = GoogleSheetsManager()
-            error_msg = sheets_manager.write_topics_to_sheet(sheet_url, topics_df, worksheet_name)
-            
-            if error_msg:
-                st.error(f"Error syncing to Google Sheets: {error_msg}")
-            else:
-                st.success("✅ **Changes synced to Google Sheets successfully!**")
-                
-    except Exception as e:
-        st.error(f"Unexpected error syncing to Google Sheets: {str(e)}")
+
+
+
+
+
 
 
 def create_sample_topics_data() -> pd.DataFrame:
@@ -724,6 +790,31 @@ def create_sample_topics_data() -> pd.DataFrame:
     ]
     
     return pd.DataFrame(sample_data)
+
+
+def create_similarity_threshold_ui():
+    """Create UI for similarity threshold configuration"""
+    return st.slider(
+        "**Similarity Threshold**",
+        min_value=0.5,
+        max_value=0.95,
+        value=0.70,
+        step=0.05,
+        help="Questions above this threshold will be matched to existing topics"
+    )
+
+
+def display_topic_statistics(topics_df: pd.DataFrame):
+    """Display simple topic statistics"""
+    topic_counts = topics_df.groupby('Topic').size().sort_values(ascending=False)
+    st.write(f"**Topics**: {len(topic_counts)}")
+    st.write(f"**Questions**: {len(topics_df)}")
+    
+    # Show top topics
+    if len(topic_counts) > 0:
+        with st.expander("📊 Top Topics", expanded=False):
+            for topic, count in topic_counts.head(5).items():
+                st.write(f"• **{topic}**: {count} questions")
 
 
 def display_app_footer():
