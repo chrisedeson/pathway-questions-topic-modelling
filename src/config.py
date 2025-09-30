@@ -78,76 +78,75 @@ CUSTOM_CSS = """
     
     /* Enhanced selectbox styling for both themes with simplified approach */
     
-    /* Force selectbox text to be visible in all cases */
-    .stSelectbox label {
-        color: var(--text-color, #262730) !important;
+    /* Enhanced selectbox and form control styling for dark mode compatibility */
+    
+    /* Selectbox container and input */
+    .stSelectbox > div > div[data-baseweb="select"] {
+        background-color: transparent !important;
+        border: 1px solid #d1d5db !important;
+        border-radius: 4px !important;
     }
     
-    /* Main selectbox container */
-    .stSelectbox > div > div,
-    .stSelectbox div[data-baseweb="select"] > div,
-    .stSelectbox div[data-baseweb="select"] {
-        background-color: var(--background-color, white) !important;
-        color: var(--text-color, #262730) !important;
-        border: 1px solid var(--border-color, #d1d5db) !important;
-    }
-    
-    /* All text inside selectbox */
-    .stSelectbox div[data-baseweb="select"] *,
+    /* Selectbox text and selected value */
     .stSelectbox div[data-baseweb="select"] div,
-    .stSelectbox div[data-baseweb="select"] span {
-        color: var(--text-color, #262730) !important;
-        opacity: 1 !important;
+    .stSelectbox div[data-baseweb="select"] span,
+    .stSelectbox div[data-baseweb="select"] {
+        color: inherit !important;
+        background-color: transparent !important;
     }
     
-    /* Dropdown options */
+    /* Dark mode selectbox styling */
+    [data-theme="dark"] .stSelectbox > div > div[data-baseweb="select"] {
+        border: 1px solid #4a5568 !important;
+        background-color: #2d3748 !important;
+    }
+    
+    [data-theme="dark"] .stSelectbox div[data-baseweb="select"] div,
+    [data-theme="dark"] .stSelectbox div[data-baseweb="select"] span {
+        color: #ffffff !important;
+    }
+    
+    /* Dropdown menu styling */
     .stSelectbox div[role="listbox"] {
-        background-color: var(--background-color, white) !important;
-        border: 1px solid var(--border-color, #d1d5db) !important;
-    }
-    
-    .stSelectbox div[role="option"] {
-        background-color: var(--background-color, white) !important;
-        color: var(--text-color, #262730) !important;
-    }
-    
-    .stSelectbox div[role="option"]:hover {
-        background-color: var(--secondary-background-color, #f8f9fa) !important;
-        color: var(--text-color, #262730) !important;
-    }
-    
-    /* Nuclear option - force ALL selectbox text to be visible */
-    .stSelectbox * {
-        color: var(--text-color, #262730) !important;
-        opacity: 1 !important;
-    }
-    
-    /* Specifically target the selected value display */
-    .stSelectbox [data-baseweb="select"] [data-testid] {
-        color: var(--text-color, #262730) !important;
-    }
-    
-    /* Override any inherited dark styles */
-    [data-theme="dark"] .stSelectbox *,
-    .stApp[data-testid="stApp"] .stSelectbox * {
-        color: #fafafa !important;
-    }
-    
-    [data-theme="dark"] .stSelectbox > div > div,
-    [data-theme="dark"] .stSelectbox div[data-baseweb="select"] > div {
-        background-color: #262730 !important;
-        color: #fafafa !important;
-        border: 1px solid #30363d !important;
+        background-color: white !important;
+        border: 1px solid #d1d5db !important;
+        border-radius: 4px !important;
     }
     
     [data-theme="dark"] .stSelectbox div[role="listbox"] {
-        background-color: #262730 !important;
-        border: 1px solid #30363d !important;
+        background-color: #2d3748 !important;
+        border: 1px solid #4a5568 !important;
     }
     
-        [data-theme="dark"] .stSelectbox div[role="option"] {
-        background-color: #262730 !important;
-        color: #fafafa !important;
+    /* Dropdown options */
+    .stSelectbox div[role="option"] {
+        color: #1a202c !important;
+        background-color: transparent !important;
+    }
+    
+    .stSelectbox div[role="option"]:hover {
+        background-color: #f7fafc !important;
+    }
+    
+    [data-theme="dark"] .stSelectbox div[role="option"] {
+        color: #ffffff !important;
+    }
+    
+    [data-theme="dark"] .stSelectbox div[role="option"]:hover {
+        background-color: #4a5568 !important;
+    }
+    
+    /* Number input dark mode fixes */
+    [data-theme="dark"] .stNumberInput > div > div > input {
+        background-color: #2d3748 !important;
+        color: #ffffff !important;
+        border: 1px solid #4a5568 !important;
+    }
+    
+    [data-theme="dark"] .stNumberInput button {
+        background-color: #4a5568 !important;
+        color: #ffffff !important;
+        border: 1px solid #4a5568 !important;
     }
     
     /* Number input styling fixes */
