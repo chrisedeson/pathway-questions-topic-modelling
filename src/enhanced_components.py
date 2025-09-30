@@ -697,7 +697,7 @@ def display_visualizations_tab(results: Dict[str, Any]):
             st.info("No matched questions available for distribution visualization.")
     
     with viz_tab2:
-        st.write("### Confidence Analysis")
+        st.write("### 📊 Confidence Analysis")
         
         if similar_df is not None and not similar_df.empty and 'similarity_score' in similar_df.columns:
             # Prepare confidence data

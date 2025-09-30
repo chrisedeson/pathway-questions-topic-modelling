@@ -132,15 +132,15 @@ def display_topic_hierarchy(topic_model: BERTopic, topic_names: Dict[int, str] =
         # Dynamic height based on number of topics
         num_topics = len(topic_model.get_topic_info())
         if num_topics <= 50:
-            height = 600
-        elif num_topics <= 100:
-            height = 800
-        elif num_topics <= 200:
             height = 1000
+        elif num_topics <= 100:
+            height = 1500
+        elif num_topics <= 200:
+            height = 2000
         elif num_topics <= 500:
-            height = 2500
+            height = 3500
         else:
-            height = 3000  # For very large datasets
+            height = 5000  # For very large datasets
         
         fig_hier.update_layout(height=height)
         st.plotly_chart(fig_hier, use_container_width=True, key="topic_hierarchy")
