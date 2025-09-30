@@ -262,7 +262,11 @@ def display_topic_words_chart(topic_model: BERTopic, topic_names: Dict[int, str]
         topic_info = topic_model.get_topic_info()
         
         # Select topics to display (excluding noise topic -1)
-        topics_to_show = topic_info[topic_info['Topic'] != -1]['Topic'].tolist()
+        all_topics = topic_info[topic_info['Topic'] != -1]['Topic'].tolist()
+        
+        # Limit topics for better visualization - show top 20 by size
+        topic_sizes = topic_info[topic_info['Topic'] != -1].head(20)['Topic'].tolist()
+        topics_to_show = topic_sizes
         
         # Create word importance data
         word_data = []
@@ -272,6 +276,9 @@ def display_topic_words_chart(topic_model: BERTopic, topic_names: Dict[int, str]
             # Use generated topic name if available, otherwise fall back to Topic ID
             if topic_names and topic_id in topic_names:
                 topic_label = topic_names[topic_id]
+                # Truncate long topic names for better display
+                if len(topic_label) > 50:
+                    topic_label = topic_label[:47] + "..."
             else:
                 topic_label = f"Topic {topic_id}"
                 
@@ -285,24 +292,43 @@ def display_topic_words_chart(topic_model: BERTopic, topic_names: Dict[int, str]
         if word_data:
             word_df = pd.DataFrame(word_data)
             
+            # Dynamic height based on number of topics
+            num_topics = len(topics_to_show)
+            if num_topics <= 15:
+                chart_height = 700
+            elif num_topics <= 20:
+                chart_height = 1000
+            else:
+                chart_height = 1200
+            
             fig = px.bar(
                 word_df, 
                 y='Topic', 
                 x='Score', 
                 color='Word',
                 orientation='h',
-                title="Top Words by Topic (TF-IDF Scores)",
-                height=600
+                title=f"Top Words by Topic (TF-IDF Scores) - Showing Top {num_topics} Topics",
+                height=chart_height
             )
             
             fig.update_layout(
                 showlegend=False,
-                yaxis={'categoryorder': 'total ascending'}
+                yaxis={
+                    'categoryorder': 'total ascending',
+                    'title': 'Topics'
+                },
+                xaxis={'title': 'TF-IDF Score'},
+                margin=dict(l=200)  # More space for topic names
             )
             
-            st.plotly_chart(fig, width="stretch", key="topic_words_chart")
+            st.plotly_chart(fig, use_container_width=True, key="topic_words_chart")
             
-            st.info("🔍 **Pro Tip:** Look for words that make sense together! If you see random words mixed together, that topic might need to be split into smaller, more focused topics.")
+            # Show additional information
+            total_topics = len(all_topics)
+            if total_topics > num_topics:
+                st.info(f"📊 **Chart Info**: Showing top {num_topics} of {total_topics} topics for better readability. Topics are ordered by size (number of questions).")
+            
+            st.success("🔍 **Pro Tip:** Look for words that make sense together! If you see random words mixed together, that topic might need to be split into smaller, more focused topics.")
             
     except Exception as e:
         st.warning(f"Could not create topic words chart: {str(e)}")
