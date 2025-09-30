@@ -19,7 +19,6 @@ from pathlib import Path
 import asyncio
 import os
 import io
-from streamlit_autorefresh import st_autorefresh
 
 from utils import validate_questions_file, create_session_state_defaults, calculate_clustering_metrics
 from google_sheets_utils import (
@@ -27,7 +26,6 @@ from google_sheets_utils import (
     create_sheets_connection_ui, SheetsPermission
 )
 from hybrid_topic_processor import HybridTopicProcessor
-from config import GOOGLE_SHEETS_AUTO_REFRESH_INTERVAL
 
 
 def create_chart_header(title: str, explanation: str, icon: str = "❔"):
@@ -180,10 +178,6 @@ def create_google_sheets_ui() -> Dict[str, Any]:
         """)
     
     st.markdown("---")
-    
-    # Auto-refresh setup
-    if st.checkbox("🔄 **Auto-refresh** (updates every 10 seconds)", value=False):
-        st_autorefresh(interval=GOOGLE_SHEETS_AUTO_REFRESH_INTERVAL * 1000, key="sheets_refresh")
     
     # Create two columns for questions and topics sheets
     col1, col2 = st.columns(2)
