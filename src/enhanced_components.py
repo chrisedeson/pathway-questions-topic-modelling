@@ -300,7 +300,7 @@ def create_google_sheets_ui() -> Dict[str, Any]:
 def create_hybrid_processing_tab():
     """Create the main hybrid processing interface"""
     
-    st.header("🚀 Hybrid Topic Analysis")
+    st.header("Hybrid Topic Analysis")
     
     # Data source selection
     data_result = create_data_source_selection()
@@ -402,7 +402,7 @@ def run_hybrid_analysis(questions_df: pd.DataFrame,
 def display_hybrid_results(results: Dict[str, Any]):
     """Display hybrid analysis results"""
     
-    st.header("📊 Hybrid Analysis Results")
+    st.header("Hybrid Analysis Results")
     
     similar_df = results.get('similar_questions_df', pd.DataFrame())
     clustered_df = results.get('clustered_questions_df')
@@ -453,7 +453,7 @@ def display_hybrid_results(results: Dict[str, Any]):
 def display_similar_questions_tab(similar_df: pd.DataFrame):
     """Display questions that matched existing topics"""
     
-    st.subheader("✅ Questions Matched to Existing Topics")
+    st.subheader("Questions Matched to Existing Topics")
     
     if similar_df.empty:
         st.info("No questions matched existing topics with the current similarity threshold.")
@@ -484,7 +484,7 @@ def display_similar_questions_tab(similar_df: pd.DataFrame):
 def display_new_topics_tab(clustered_df: Optional[pd.DataFrame], topic_names: Dict[int, str]):
     """Display newly discovered topics in an interactive table format"""
     
-    st.subheader("🆕 Newly Discovered Topics")
+    st.subheader("Newly Discovered Topics")
     
     if clustered_df is None or clustered_df.empty:
         st.info("No new topics were discovered. All questions matched existing topics or were classified as noise.")
@@ -585,7 +585,7 @@ def display_new_topics_tab(clustered_df: Optional[pd.DataFrame], topic_names: Di
         
         # Detailed view option
         st.markdown("---")
-        st.subheader("🔍 Detailed Topic View")
+        st.subheader("Detailed Topic View")
         
         selected_topic_id = st.selectbox(
             "Select a topic to view all questions:",
@@ -597,7 +597,7 @@ def display_new_topics_tab(clustered_df: Optional[pd.DataFrame], topic_names: Di
             selected_topic_name = topic_names.get(selected_topic_id, f"Cluster {selected_topic_id}")
             topic_questions = clustered_df[clustered_df['cluster_id'] == selected_topic_id]['question'].tolist()
             
-            st.write(f"**📂 {selected_topic_name}** ({len(topic_questions)} questions)")
+            st.write(f"**{selected_topic_name}** ({len(topic_questions)} questions)")
             
             # Display all questions in an expandable format
             with st.expander(f"View all {len(topic_questions)} questions", expanded=False):
@@ -658,7 +658,7 @@ def display_output_files_tab(output_files: list):
 def display_visualizations_tab(results: Dict[str, Any]):
     """Display comprehensive visualizations"""
     
-    st.subheader("📊 Data Visualizations")
+    st.subheader("Data Visualizations")
     
     # Get the data and models from results
     eval_df = results.get('eval_questions_df')

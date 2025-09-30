@@ -92,7 +92,7 @@ def display_interactive_scatter(df: pd.DataFrame, embeddings: np.ndarray, topic_
 def display_topic_distribution_chart(df: pd.DataFrame, chart_key: str = "topic_distribution_bar"):
     """Display topic distribution bar chart with unique key"""
     create_chart_header(
-        "📊 Questions Per Topic", 
+        "Questions Per Topic", 
         "This bar chart shows how many questions belong to each topic - like counting how many people are in different clubs at school. The taller the bar, the more questions we found about that topic. This helps you see which topics students ask about most!"
     )
     
@@ -155,7 +155,7 @@ def display_topic_hierarchy(topic_model: BERTopic, topic_names: Dict[int, str] =
 def display_topic_similarity_heatmap(topic_model: BERTopic, topic_names: Dict[int, str] = None):
     """Display topic similarity heatmap"""
     create_chart_header(
-        "🔥 Topic Similarity Heatmap", 
+        "Topic Similarity Heatmap", 
         "This is like a friendship map! Each square shows how similar two topics are to each other. Red squares mean 'very similar topics' (like best friends), while blue squares mean 'very different topics' (like strangers). Use this to spot topics that might be talking about the same thing!"
     )
     
@@ -208,7 +208,7 @@ def display_topic_similarity_heatmap(topic_model: BERTopic, topic_names: Dict[in
 def display_confidence_distribution(df: pd.DataFrame):
     """Display confidence/probability distribution"""
     create_chart_header(
-        "📊 Confidence Distribution", 
+        "Confidence Distribution", 
         "This shows how confident the AI is about its topic assignments! Think of it like test scores - higher numbers mean the AI is really sure about which topic a question belongs to. Lower scores mean the AI had to guess a bit. Most questions should have pretty high confidence scores if the analysis worked well!"
     )
     
@@ -231,7 +231,7 @@ def display_confidence_distribution(df: pd.DataFrame):
     
     # Box plot by topic
     create_chart_header(
-        "📦 Confidence by Topic", 
+        "Confidence by Topic", 
         "Box plots show the range of confidence scores for each topic. The middle line is the average, the box shows where most scores fall, and the whiskers show the full range. Topics with tight boxes have consistent confidence - topics with wide boxes vary a lot!"
     )
     
@@ -254,7 +254,7 @@ def display_confidence_distribution(df: pd.DataFrame):
 def display_topic_words_chart(topic_model: BERTopic, topic_names: Dict[int, str] = None):
     """Display top words for each topic using generated topic names"""
     create_chart_header(
-        "🔤 Top Words by Topic", 
+        "Top Words by Topic", 
         "These are the most important words that define each topic! Think of them as hashtags or keywords - they tell you what each topic is really about. Longer bars mean more important words for that topic. If you see weird words, the AI might need better training!"
     )
     
