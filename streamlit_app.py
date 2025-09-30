@@ -114,7 +114,16 @@ def create_sidebar():
             st.markdown("### 📊 Current Analysis")
             st.metric("Total Questions", len(results.get('eval_questions_df', [])))
             st.metric("Matched Existing", len(similar_df))
-            st.metric("New Topics", len(clustered_df) if clustered_df is not None else 0)
+            
+            # Show both new topics count and questions in new topics for clarity
+            if clustered_df is not None and len(clustered_df) > 0:
+                n_new_topics = len(clustered_df['cluster_id'].unique())
+                n_questions_in_new_topics = len(clustered_df)
+                st.metric("New Topics Found", n_new_topics)
+                st.metric("Questions in New Topics", n_questions_in_new_topics)
+            else:
+                st.metric("New Topics Found", 0)
+                st.metric("Questions in New Topics", 0)
         
         st.markdown("---")
         
