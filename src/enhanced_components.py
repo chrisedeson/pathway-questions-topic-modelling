@@ -19,6 +19,7 @@ from pathlib import Path
 import asyncio
 import os
 import io
+from streamlit_autorefresh import st_autorefresh
 
 from utils import validate_questions_file, create_session_state_defaults, calculate_clustering_metrics
 from google_sheets_utils import (
@@ -26,6 +27,7 @@ from google_sheets_utils import (
     create_sheets_connection_ui, SheetsPermission
 )
 from hybrid_topic_processor import HybridTopicProcessor
+from config import GOOGLE_SHEETS_AUTO_REFRESH_INTERVAL
 
 
 def create_chart_header(title: str, explanation: str, icon: str = "❔"):
@@ -178,6 +180,10 @@ def create_google_sheets_ui() -> Dict[str, Any]:
         """)
     
     st.markdown("---")
+    
+    # Auto-refresh setup
+    if st.checkbox("🔄 **Auto-refresh** (updates every 10 seconds)", value=False):
+        st_autorefresh(interval=GOOGLE_SHEETS_AUTO_REFRESH_INTERVAL * 1000, key="sheets_refresh")
     
     # Create two columns for questions and topics sheets
     col1, col2 = st.columns(2)
@@ -335,25 +341,6 @@ def create_hybrid_processing_tab():
             )
         else:
             sample_size = len(questions_df)
-        
-        # Clustering configuration
-        with st.expander("🔧 **Advanced Clustering Settings**", expanded=False):
-            from config import MIN_CLUSTER_SIZE
-            st.write(f"**Current MIN_CLUSTER_SIZE**: {MIN_CLUSTER_SIZE}")
-            
-            # Provide guidance
-            expected_questions = sample_size if processing_mode == "sample" else len(questions_df)
-            recommended_size = max(5, min(15, expected_questions // 200))  # Dynamic recommendation
-            
-            st.info(f"💡 **Recommendation**: For {expected_questions} questions, consider MIN_CLUSTER_SIZE between {recommended_size-2} and {recommended_size+3}")
-            st.markdown("""
-            **Clustering Guidelines:**
-            - **Smaller values (3-5)**: More topics, but risk over-clustering
-            - **Medium values (8-12)**: Balanced, good for most datasets
-            - **Larger values (15-25)**: Fewer, broader topics
-            
-            **Optimal ratio**: Aim for 10-30% of questions becoming new topics.
-            """)
     
     with col2:
         if topics_df is not None:
@@ -649,8 +636,8 @@ def display_output_files_tab(output_files: list):
             # Load and display preview
             try:
                 df = pd.read_csv(filepath)
-                st.write(f"**Complete Data** ({len(df)} rows):")
-                st.dataframe(df, width="stretch")
+                st.write(f"**Preview** ({len(df)} rows):")
+                st.dataframe(df.head(10), width="stretch")
                 
                 # Download button
                 with open(filepath, 'rb') as f:

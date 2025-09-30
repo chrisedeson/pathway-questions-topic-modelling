@@ -22,7 +22,7 @@ PROCESSING_MODE = os.getenv('PROCESSING_MODE', "sample")
 SAMPLE_SIZE = int(os.getenv('SAMPLE_SIZE', "2000"))
 
 # Clustering Configuration - Updated based on hybrid notebook
-MIN_CLUSTER_SIZE = int(os.getenv('HDBSCAN_MIN_CLUSTER_SIZE', "8"))  # Increased to reduce over-clustering
+MIN_CLUSTER_SIZE = int(os.getenv('HDBSCAN_MIN_CLUSTER_SIZE', "3"))  # Tighter clusters
 UMAP_N_COMPONENTS = int(os.getenv('UMAP_N_COMPONENTS', "5"))
 
 # Concurrent Processing Configuration
@@ -36,6 +36,7 @@ CACHE_DIR = os.getenv('CACHE_DIR', "embeddings_cache/")
 
 # Google Sheets Configuration
 GOOGLE_SHEETS_CREDENTIALS_PATH = os.getenv('GOOGLE_SHEETS_CREDENTIALS_PATH', "credentials/byu-pathway-chatbot-service-account.json")
+GOOGLE_SHEETS_AUTO_REFRESH_INTERVAL = int(os.getenv('GOOGLE_SHEETS_AUTO_REFRESH_INTERVAL', "10"))
 
 # File paths
 RESULTS_DIR = "results"
@@ -76,75 +77,104 @@ CUSTOM_CSS = """
         margin-bottom: 1rem;
     }
     
-    /* Enhanced selectbox and form control styling for dark mode compatibility */
+    /* Enhanced selectbox styling for both themes with simplified approach */
     
-    /* Selectbox container and input */
-    .stSelectbox > div > div[data-baseweb="select"] {
-        background-color: transparent !important;
-        border: 1px solid #d1d5db !important;
-        border-radius: 4px !important;
+    /* Force selectbox text to be visible in all cases */
+    .stSelectbox label {
+        color: var(--text-color, #262730) !important;
     }
     
-    /* Selectbox text and selected value */
-    .stSelectbox div[data-baseweb="select"] div,
-    .stSelectbox div[data-baseweb="select"] span,
+    /* Main selectbox container */
+    .stSelectbox > div > div,
+    .stSelectbox div[data-baseweb="select"] > div,
     .stSelectbox div[data-baseweb="select"] {
-        color: inherit !important;
-        background-color: transparent !important;
+        background-color: var(--background-color, white) !important;
+        color: var(--text-color, #262730) !important;
+        border: 1px solid var(--border-color, #d1d5db) !important;
     }
     
-    /* Dark mode selectbox styling */
-    [data-theme="dark"] .stSelectbox > div > div[data-baseweb="select"] {
-        border: 1px solid #4a5568 !important;
-        background-color: #2d3748 !important;
-    }
-    
-    [data-theme="dark"] .stSelectbox div[data-baseweb="select"] div,
-    [data-theme="dark"] .stSelectbox div[data-baseweb="select"] span {
-        color: #ffffff !important;
-    }
-    
-    /* Dropdown menu styling */
-    .stSelectbox div[role="listbox"] {
-        background-color: white !important;
-        border: 1px solid #d1d5db !important;
-        border-radius: 4px !important;
-    }
-    
-    [data-theme="dark"] .stSelectbox div[role="listbox"] {
-        background-color: #2d3748 !important;
-        border: 1px solid #4a5568 !important;
+    /* All text inside selectbox */
+    .stSelectbox div[data-baseweb="select"] *,
+    .stSelectbox div[data-baseweb="select"] div,
+    .stSelectbox div[data-baseweb="select"] span {
+        color: var(--text-color, #262730) !important;
+        opacity: 1 !important;
     }
     
     /* Dropdown options */
+    .stSelectbox div[role="listbox"] {
+        background-color: var(--background-color, white) !important;
+        border: 1px solid var(--border-color, #d1d5db) !important;
+    }
+    
     .stSelectbox div[role="option"] {
-        color: #1a202c !important;
-        background-color: transparent !important;
+        background-color: var(--background-color, white) !important;
+        color: var(--text-color, #262730) !important;
     }
     
     .stSelectbox div[role="option"]:hover {
-        background-color: #f7fafc !important;
+        background-color: var(--secondary-background-color, #f8f9fa) !important;
+        color: var(--text-color, #262730) !important;
     }
     
-    [data-theme="dark"] .stSelectbox div[role="option"] {
-        color: #ffffff !important;
+    /* Nuclear option - force ALL selectbox text to be visible */
+    .stSelectbox * {
+        color: var(--text-color, #262730) !important;
+        opacity: 1 !important;
     }
     
-    [data-theme="dark"] .stSelectbox div[role="option"]:hover {
-        background-color: #4a5568 !important;
+    /* Specifically target the selected value display */
+    .stSelectbox [data-baseweb="select"] [data-testid] {
+        color: var(--text-color, #262730) !important;
     }
     
-    /* Number input dark mode fixes */
+    /* Override any inherited dark styles */
+    [data-theme="dark"] .stSelectbox *,
+    .stApp[data-testid="stApp"] .stSelectbox * {
+        color: #fafafa !important;
+    }
+    
+    [data-theme="dark"] .stSelectbox > div > div,
+    [data-theme="dark"] .stSelectbox div[data-baseweb="select"] > div {
+        background-color: #262730 !important;
+        color: #fafafa !important;
+        border: 1px solid #30363d !important;
+    }
+    
+    [data-theme="dark"] .stSelectbox div[role="listbox"] {
+        background-color: #262730 !important;
+        border: 1px solid #30363d !important;
+    }
+    
+        [data-theme="dark"] .stSelectbox div[role="option"] {
+        background-color: #262730 !important;
+        color: #fafafa !important;
+    }
+    
+    /* Number input styling fixes */
+    .stNumberInput > div > div > input {
+        background-color: var(--background-color, white) !important;
+        color: var(--text-color, #262730) !important;
+        border: 1px solid var(--border-color, #d1d5db) !important;
+    }
+    
     [data-theme="dark"] .stNumberInput > div > div > input {
-        background-color: #2d3748 !important;
-        color: #ffffff !important;
-        border: 1px solid #4a5568 !important;
+        background-color: #262730 !important;
+        color: #fafafa !important;
+        border: 1px solid #30363d !important;
+    }
+    
+    /* Button styling for better contrast */
+    .stNumberInput button {
+        background-color: var(--secondary-background-color, #f8f9fa) !important;
+        color: var(--text-color, #262730) !important;
+        border: 1px solid var(--border-color, #d1d5db) !important;
     }
     
     [data-theme="dark"] .stNumberInput button {
-        background-color: #4a5568 !important;
-        color: #ffffff !important;
-        border: 1px solid #4a5568 !important;
+        background-color: #30363d !important;
+        color: #fafafa !important;
+        border: 1px solid #30363d !important;
     }
 </style>
 """
