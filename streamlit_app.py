@@ -17,7 +17,12 @@ sys.path.insert(0, str(src_path))
 
 # Now import modular components
 try:
-    from config import CUSTOM_CSS, PAGE_TITLE, PAGE_ICON, LAYOUT
+    from config import (
+        CUSTOM_CSS, PAGE_TITLE, PAGE_ICON, LAYOUT,
+        EMBEDDING_MODEL, EMBEDDING_DIMENSIONS, CHAT_MODEL,
+        UMAP_N_COMPONENTS, MIN_CLUSTER_SIZE, SIMILARITY_THRESHOLD,
+        CACHE_EMBEDDINGS
+    )
     from enhanced_components import (
         display_header, check_api_key, create_hybrid_processing_tab,
         display_hybrid_results, display_app_footer
@@ -265,26 +270,26 @@ def display_about_tab():
     st.markdown("""
     The system generates **three important files** for Elder Edwards:
     
-    1. **📋 Similar Questions File**: Questions matched to existing topics with similarity scores
-    2. **🆕 New Topics File**: Newly discovered topics with representative questions
-    3. **📊 Complete Review File**: All questions with topic assignments for comprehensive review
+    1. **Similar Questions File**: Questions matched to existing topics with similarity scores
+    2. **New Topics File**: Newly discovered topics with representative questions
+    3. **Complete Review File**: All questions with topic assignments for comprehensive review
     
     These files help Elder Edwards make informed decisions about topic management.
     """)
     
     # Model information
-    with st.expander("🔬 **Technical Details**", expanded=False):
-        st.markdown("""
+    with st.expander("**Technical Details**", expanded=False):
+        st.markdown(f"""
         **Models Used:**
-        - **Embeddings**: text-embedding-3-small (1536 dimensions)
-        - **Chat**: GPT-5 nano (for topic naming)
+        - **Embeddings**: {EMBEDDING_MODEL} ({EMBEDDING_DIMENSIONS} dimensions)
+        - **Chat**: {CHAT_MODEL} (for topic naming)
         - **Clustering**: HDBSCAN with UMAP dimensionality reduction
         
         **Configuration:**
-        - **UMAP Components**: 5
-        - **Min Cluster Size**: 3 (tighter clusters)
-        - **Default Similarity Threshold**: 0.70
-        - **Caching**: Enabled for embeddings
+        - **UMAP Components**: {UMAP_N_COMPONENTS}
+        - **Min Cluster Size**: {MIN_CLUSTER_SIZE} (minimum questions per topic)
+        - **Default Similarity Threshold**: {SIMILARITY_THRESHOLD}
+        - **Caching**: {"Enabled" if CACHE_EMBEDDINGS else "Disabled"} for embeddings
         
         **Performance:**
         - Handles thousands of questions efficiently

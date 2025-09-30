@@ -618,9 +618,9 @@ def display_output_files_tab(output_files: list):
         return
     
     file_descriptions = {
-        0: ("📋 **Similar Questions File**", "Questions that matched existing topics with their similarity scores"),
-        1: ("🆕 **New Topics File**", "Newly discovered topics with representative questions and question counts"),
-        2: ("📊 **Complete Review File**", "All questions with their topic assignments for comprehensive review")
+        0: ("**Similar Questions File**", "Questions that matched existing topics with their similarity scores"),
+        1: ("**New Topics File**", "Newly discovered topics with representative questions and question counts"),
+        2: ("**Complete Review File**", "All questions with their topic assignments for comprehensive review")
     }
     
     for i, filepath in enumerate(output_files):
