@@ -11,6 +11,9 @@ from gspread.exceptions import APIError, SpreadsheetNotFound, WorksheetNotFound
 import time
 import backoff
 from pathlib import Path
+import os
+import json
+from google.oauth2.service_account import Credentials
 
 from config import GOOGLE_SHEETS_CREDENTIALS_PATH
 
@@ -30,15 +33,77 @@ class GoogleSheetsManager:
         self.credentials_path = credentials_path or GOOGLE_SHEETS_CREDENTIALS_PATH
         self.client = None
         self.last_error = None
+    
+    def _get_credentials_from_env(self) -> Optional[Dict[str, Any]]:
+        """
+        Construct Google Service Account credentials from environment variables.
+        This is used for Streamlit Cloud deployment where JSON files can't be uploaded.
+        
+        Returns:
+            Optional[Dict[str, Any]]: Credentials dictionary or None if env vars not set
+        """
+        try:
+            # Check if all required environment variables are present
+            required_vars = [
+                'GOOGLE_SERVICE_ACCOUNT_TYPE',
+                'GOOGLE_SERVICE_ACCOUNT_PROJECT_ID',
+                'GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY_ID',
+                'GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY',
+                'GOOGLE_SERVICE_ACCOUNT_CLIENT_EMAIL',
+                'GOOGLE_SERVICE_ACCOUNT_CLIENT_ID'
+            ]
+            
+            if not all(os.getenv(var) for var in required_vars):
+                return None
+            
+            # Construct credentials dict from environment variables
+            credentials_dict = {
+                "type": os.getenv('GOOGLE_SERVICE_ACCOUNT_TYPE'),
+                "project_id": os.getenv('GOOGLE_SERVICE_ACCOUNT_PROJECT_ID'),
+                "private_key_id": os.getenv('GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY_ID'),
+                "private_key": os.getenv('GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY', '').replace('\\n', '\n'),  # Handle escaped newlines
+                "client_email": os.getenv('GOOGLE_SERVICE_ACCOUNT_CLIENT_EMAIL'),
+                "client_id": os.getenv('GOOGLE_SERVICE_ACCOUNT_CLIENT_ID'),
+                "auth_uri": os.getenv('GOOGLE_SERVICE_ACCOUNT_AUTH_URI', 'https://accounts.google.com/o/oauth2/auth'),
+                "token_uri": os.getenv('GOOGLE_SERVICE_ACCOUNT_TOKEN_URI', 'https://oauth2.googleapis.com/token'),
+                "auth_provider_x509_cert_url": os.getenv('GOOGLE_SERVICE_ACCOUNT_AUTH_PROVIDER_CERT_URL', 'https://www.googleapis.com/oauth2/v1/certs'),
+                "client_x509_cert_url": os.getenv('GOOGLE_SERVICE_ACCOUNT_CLIENT_CERT_URL', ''),
+                "universe_domain": os.getenv('GOOGLE_SERVICE_ACCOUNT_UNIVERSE_DOMAIN', 'googleapis.com')
+            }
+            
+            return credentials_dict
+            
+        except Exception as e:
+            logger.error(f"Failed to construct credentials from environment variables: {str(e)}")
+            return None
         
     def _initialize_client(self) -> bool:
-        """Initialize Google Sheets client with error handling"""
+        """
+        Initialize Google Sheets client with error handling.
+        First checks for environment variables (for Streamlit Cloud),
+        then falls back to JSON file (for local development).
+        """
         try:
+            # Try environment variables first (Streamlit Cloud deployment)
+            credentials_dict = self._get_credentials_from_env()
+            
+            if credentials_dict:
+                logger.info("Using Google Service Account credentials from environment variables")
+                scopes = [
+                    'https://www.googleapis.com/auth/spreadsheets',
+                    'https://www.googleapis.com/auth/drive'
+                ]
+                credentials = Credentials.from_service_account_info(credentials_dict, scopes=scopes)
+                self.client = gspread.authorize(credentials)
+                return True
+            
+            # Fall back to JSON file (local development)
             if not Path(self.credentials_path).exists():
-                self.last_error = f"Credentials file not found: {self.credentials_path}"
+                self.last_error = f"Credentials file not found: {self.credentials_path} and environment variables not set"
+                logger.error(self.last_error)
                 return False
                 
-            # Use service account credentials
+            logger.info(f"Using Google Service Account credentials from file: {self.credentials_path}")
             self.client = gspread.service_account(filename=self.credentials_path)
             return True
             
