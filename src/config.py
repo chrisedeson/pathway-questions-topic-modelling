@@ -37,6 +37,19 @@ CACHE_DIR = os.getenv('CACHE_DIR', "embeddings_cache/")
 # Google Sheets Configuration
 GOOGLE_SHEETS_CREDENTIALS_PATH = os.getenv('GOOGLE_SHEETS_CREDENTIALS_PATH', "credentials/byu-pathway-chatbot-service-account.json")
 
+# Google Sheets IDs - These should be set in your environment variables
+QUESTIONS_SHEET_ID = os.getenv('QUESTIONS_SHEET_ID', "")
+TOPICS_SHEET_ID = os.getenv('TOPICS_SHEET_ID', "")
+
+# Sync Configuration
+DEFAULT_SYNC_INTERVAL_MINUTES = int(os.getenv('DEFAULT_SYNC_INTERVAL_MINUTES', "10"))
+
+# Development Configuration
+DEV_PASSWORD = os.getenv('DEV_PASSWORD', "")
+
+# Database Configuration
+DATABASE_URL = os.getenv('DATABASE_URL', "")
+
 # File paths
 RESULTS_DIR = "results"
 DATA_DIR = "data"

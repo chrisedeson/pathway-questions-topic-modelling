@@ -21,7 +21,6 @@ from tqdm import tqdm
 import hashlib
 import pickle
 import os
-from tqdm import tqdm
 from pathlib import Path
 import time
 
@@ -287,8 +286,6 @@ class HybridTopicProcessor:
         st.success(f"✅ Embedding generation complete! Cache hits: {cache_hits}, API calls: {api_calls}, Cache efficiency: {cache_efficiency:.1f}%")
         
         return embeddings
-        
-        return embeddings
     
     def find_best_topic_match(self, question_embedding: List[float], topic_embeddings_df: pd.DataFrame) -> Optional[Dict]:
         """Find the best matching topic for a question using cosine similarity (optimized from insights)"""
@@ -344,7 +341,9 @@ class HybridTopicProcessor:
         
         # Generate embeddings for existing topic questions
         st.write(f"📊 Generating embeddings for {len(topic_questions_df)} existing topic questions...")
-        topic_questions_list = topic_questions_df['Question'].tolist()
+        # Handle both 'Question' and 'question' column names
+        question_col = 'Question' if 'Question' in topic_questions_df.columns else 'question'
+        topic_questions_list = topic_questions_df[question_col].tolist()
         topic_embeddings_list = self.get_embeddings_batch(topic_questions_list)
         topic_embeddings = np.array(topic_embeddings_list)
         
@@ -549,14 +548,7 @@ class HybridTopicProcessor:
     
     @backoff.on_exception(
         backoff.expo,
-        (openai.RateLimitError, openai.APITimeoutError, openai.APIError),
-        max_tries=3,
-        base=2,
-        max_value=60
-    )
-    @backoff.on_exception(
-        backoff.expo,
-        (APIStatusError, asyncio.TimeoutError),
+        (openai.RateLimitError, openai.APITimeoutError, openai.APIError, APIStatusError, asyncio.TimeoutError),
         max_tries=3,
         base=2,
         max_value=60
