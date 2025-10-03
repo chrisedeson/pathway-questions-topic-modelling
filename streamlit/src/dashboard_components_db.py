@@ -1,5 +1,6 @@
 """
 Database-backed dashboard components for instant loading with pre-computed data
+Enhanced with smart caching and background updates
 """
 import streamlit as st
 import pandas as pd
@@ -11,6 +12,12 @@ from datetime import datetime, timedelta
 import numpy as np
 
 from data_service import get_data_service
+
+# Import our smart data manager
+try:
+    from streamlit_data_manager import data_manager
+except ImportError:
+    data_manager = None
 
 
 def display_dashboard_header():
@@ -464,18 +471,71 @@ def display_export_options(dashboard_data: Dict[str, Any]):
 
 
 def display_full_dashboard():
-    """Display the complete dashboard"""
+    """Display the complete dashboard with smart caching integration"""
     # Header
     display_dashboard_header()
+    
+    # Check if we have cached analysis data from startup
+    if st.session_state.get('cached_analysis') and st.session_state.get('startup_data_loaded'):
+        # Display cached analysis info
+        cached_analysis = st.session_state['cached_analysis']
+        
+        st.info(f"""
+        📊 **Displaying Cached Analysis** (Run ID: `{cached_analysis['run_id'][:8]}...`)
+        - **Completed:** {cached_analysis['completed_at'][:19]}
+        - **Questions:** {cached_analysis['total_questions']}
+        - **Topics:** {cached_analysis['total_topics']}
+        """)
+        
+        # Option to load fresh data
+        col1, col2 = st.columns([3, 1])
+        with col2:
+            if st.button("🔄 **Load Fresh Data**", type="secondary"):
+                # Clear cached analysis and reload
+                if 'cached_analysis' in st.session_state:
+                    del st.session_state['cached_analysis']
+                if 'startup_data_loaded' in st.session_state:
+                    del st.session_state['startup_data_loaded']
+                st.rerun()
     
     # Time period selector
     selected_period = display_time_period_selector()
     
-    # Load data for selected period
-    dashboard_data = load_dashboard_data(selected_period)
+    # Load data for selected period (either from cache or fresh from DB)
+    if st.session_state.get('cached_analysis') and st.session_state.get('startup_data_loaded'):
+        # Use cached data (faster)
+        dashboard_data = load_dashboard_data_from_cache(st.session_state['cached_analysis'], selected_period)
+    else:
+        # Load fresh from database
+        dashboard_data = load_dashboard_data(selected_period)
     
     if 'error' in dashboard_data:
         st.error(f"❌ Failed to load dashboard data: {dashboard_data['error']}")
+        
+        # Offer alternative data loading
+        st.markdown("### 🔧 Alternative Data Loading")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("📥 **Try Load from Cache**"):
+                try:
+                    from streamlit_data_manager import data_manager
+                    latest_analysis = data_manager.load_latest_analysis_from_database()
+                    if latest_analysis:
+                        st.session_state['cached_analysis'] = latest_analysis
+                        st.session_state['startup_data_loaded'] = True
+                        st.success("✅ Analysis loaded from cache!")
+                        st.rerun()
+                    else:
+                        st.warning("No cached analysis available")
+                except Exception as e:
+                    st.error(f"Cache loading failed: {str(e)}")
+        
+        with col2:
+            if st.button("🚀 **Run New Analysis**"):
+                st.info("💡 Use Developer Mode in the sidebar to run a new analysis")
+        
         return
     
     # Analysis status
@@ -511,3 +571,48 @@ def display_full_dashboard():
     
     # Help section
     display_help_and_interpretation()
+
+
+def load_dashboard_data_from_cache(cached_analysis: Dict[str, Any], time_period: str) -> Dict[str, Any]:
+    """Load dashboard data from cached analysis results"""
+    try:
+        # Extract data from cached analysis
+        cached_results = cached_analysis.get('cached_results', {})
+        
+        # Convert cached data to dashboard format
+        dashboard_data = {
+            'time_period': time_period,
+            'total_questions': cached_analysis.get('total_questions', 0),
+            'total_topics': cached_analysis.get('total_topics', 0),
+            'last_analysis': cached_analysis.get('completed_at'),
+            'run_id': cached_analysis.get('run_id'),
+            
+            # Mock data for charts (replace with actual cached data when available)
+            'questions_by_language': {'en': cached_analysis.get('total_questions', 0)},
+            'sentiment_distribution': {'neutral': cached_analysis.get('total_questions', 0)},
+            'topic_frequencies': {},
+            'recent_questions': [],
+            'trends_data': {},
+            'data_source': 'cache'
+        }
+        
+        return dashboard_data
+        
+    except Exception as e:
+        return {'error': f"Failed to load cached data: {str(e)}"}
+
+
+# Add this function at the top of the file, after the imports
+def get_cached_analysis_status():
+    """Get status of cached analysis"""
+    if st.session_state.get('cached_analysis') and st.session_state.get('startup_data_loaded'):
+        cached_analysis = st.session_state['cached_analysis']
+        return {
+            'has_cache': True,
+            'run_id': cached_analysis.get('run_id'),
+            'completed_at': cached_analysis.get('completed_at'),
+            'total_questions': cached_analysis.get('total_questions'),
+            'total_topics': cached_analysis.get('total_topics')
+        }
+    else:
+        return {'has_cache': False}

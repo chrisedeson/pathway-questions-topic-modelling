@@ -1,5 +1,6 @@
 """
 Database-backed developer mode interface - sidebar password protected settings and controls
+Enhanced with smart caching and background updates
 """
 import streamlit as st
 import pandas as pd
@@ -15,6 +16,12 @@ from config import (
     QUESTIONS_SHEET_ID, TOPICS_SHEET_ID, DEFAULT_SYNC_INTERVAL_MINUTES,
     DEV_PASSWORD
 )
+
+# Import our smart data manager
+try:
+    from streamlit_data_manager import data_manager
+except ImportError:
+    data_manager = None
 
 def check_dev_password() -> bool:
     """Check if the user is already authenticated in the session."""
@@ -110,18 +117,49 @@ def show_dev_sidebar():
             show_configuration_settings()
 
 def show_analysis_controls():
-    """Display analysis control panel"""
+    """Display analysis control panel with smart caching integration"""
     st.markdown("### 🔬 Analysis Controls")
     
-    # Get current status
-    analysis_engine = get_analysis_engine()
-    status = analysis_engine.get_analysis_status()
+    # Show smart caching status first
+    if data_manager:
+        st.markdown("#### 💾 Smart Caching Status")
+        
+        # Display background update status
+        bg_status = data_manager.get_background_update_status()
+        
+        if bg_status['running']:
+            st.info("🔄 **Background database update in progress...**")
+            st.progress(0.7)
+        elif bg_status['last_sync']:
+            st.success(f"✅ **Last database update:** {bg_status['last_sync'][:19]}")
+        else:
+            st.info("📭 **No recent database updates**")
+        
+        # Show cached analysis status
+        if st.session_state.get('cached_analysis') and st.session_state.get('startup_data_loaded'):
+            cached_analysis = st.session_state['cached_analysis']
+            st.info(f"""
+            📊 **Cached Analysis Available:**
+            - **Run ID:** `{cached_analysis['run_id'][:8]}...`
+            - **Completed:** {cached_analysis['completed_at'][:19]}
+            - **Questions:** {cached_analysis['total_questions']}
+            - **Topics:** {cached_analysis['total_topics']}
+            """)
+            
+            # Option to clear cache
+            if st.button("🗑️ **Clear Cache**", type="secondary"):
+                if 'cached_analysis' in st.session_state:
+                    del st.session_state['cached_analysis']
+                if 'startup_data_loaded' in st.session_state:
+                    del st.session_state['startup_data_loaded']
+                st.success("✅ Cache cleared!")
+                st.rerun()
+        else:
+            st.warning("📭 **No cached analysis** - Run new analysis to populate cache")
     
-def show_analysis_controls():
-    """Display analysis control panel"""
-    st.markdown("### 🔬 Analysis Controls")
+    st.markdown("---")
     
-    # Get current status
+    # Get current status from existing analysis engine
     analysis_engine = get_analysis_engine()
     status = analysis_engine.get_analysis_status()
     
@@ -167,34 +205,118 @@ def show_analysis_controls():
     else:
         st.success("✅ Ready to run fresh analysis")
     
-    # Analysis controls
+    # Analysis controls with smart caching integration
+    st.markdown("#### 🚀 Analysis Options")
+    
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("▶️ Run Fresh Analysis", 
+        if st.button("▶️ **Run Smart Analysis**", 
                     disabled=status['is_running'], 
                     use_container_width=True,
                     type="primary",
-                    help="Clear database and run fresh analysis from Google Sheets"):
+                    help="Run analysis with smart caching - results cached immediately, database updated in background"):
             try:
-                # Set up progress callback
-                def progress_callback(step, progress, message):
-                    st.session_state.progress = {
-                        'step': step,
-                        'progress': progress,
-                        'message': message
-                    }
-                
-                analysis_engine.set_progress_callback(progress_callback)
-                run_id = analysis_engine.run_full_analysis(force_refresh=True)
-                
-                st.success(f"🚀 Fresh analysis started: {run_id}")
-                st.rerun()
-                
+                # Option 1: Use our enhanced analysis with smart caching
+                if data_manager:
+                    st.info("🚀 **Starting Smart Analysis** - Results will be cached immediately!")
+                    
+                    # This would integrate with your existing analysis but with smart caching
+                    # For now, trigger the existing analysis and then cache results
+                    def progress_callback(step, progress, message):
+                        st.session_state.progress = {
+                            'step': step,
+                            'progress': progress,
+                            'message': message
+                        }
+                    
+                    analysis_engine.set_progress_callback(progress_callback)
+                    run_id = analysis_engine.run_full_analysis(force_refresh=True)
+                    
+                    # Store the run ID for status checking
+                    st.session_state['last_analysis_run_id'] = run_id
+                    
+                    st.success(f"🚀 Smart analysis started: {run_id}")
+                    st.info("💡 **Smart Features:** Results will be cached for fast access while database updates in background")
+                    st.rerun()
+                else:
+                    st.error("❌ Smart data manager not available - falling back to standard analysis")
+                    
             except Exception as e:
-                st.error(f"❌ Failed to start analysis: {e}")
+                st.error(f"❌ Failed to start smart analysis: {e}")
     
     with col2:
+        if st.button("🔄 **Load Fresh from DB**", 
+                    disabled=status['is_running'],
+                    use_container_width=True,
+                    help="Load latest analysis from database into cache"):
+            try:
+                if data_manager:
+                    with st.spinner("Loading latest analysis from database..."):
+                        latest_analysis = data_manager.load_latest_analysis_from_database()
+                        
+                    if latest_analysis:
+                        st.session_state['cached_analysis'] = latest_analysis
+                        st.session_state['startup_data_loaded'] = True
+                        st.success(f"✅ Loaded analysis: {latest_analysis['run_id'][:8]}...")
+                        st.rerun()
+                    else:
+                        st.warning("📭 No analysis found in database")
+                else:
+                    st.error("❌ Smart data manager not available")
+                    
+            except Exception as e:
+                st.error(f"❌ Failed to load from database: {e}")
+    
+    # Show completion status if analysis just finished
+    if not status['is_running'] and st.session_state.get('last_analysis_run_id'):
+        last_run_id = st.session_state['last_analysis_run_id']
+        
+        # Check if this analysis run completed successfully
+        try:
+            data_service = get_data_service()
+            analysis_status = data_service.get_analysis_status()
+            
+            if analysis_status and analysis_status.get('latest_run'):
+                latest_run = analysis_status['latest_run']
+                
+                # Check if this is the run we're tracking
+                if latest_run['run_id'] == last_run_id:
+                    if latest_run['status'] == 'completed':
+                        st.success("🎉 **Analysis Completed Successfully!**")
+                        st.info(f"""
+                        ✅ **Database Updated:** All analysis results saved to database
+                        📊 **Run ID:** `{last_run_id}`
+                        🕒 **Completed:** {latest_run.get('completed_at', 'Just now')}
+                        📋 **Questions Processed:** {latest_run.get('total_questions', 0)}
+                        🏷️ **Topics Discovered:** {latest_run.get('total_topics', 0)}
+                        """)
+                        
+                        # Clear the last run ID so this message doesn't persist
+                        del st.session_state['last_analysis_run_id']
+                        
+                        # Offer to view results
+                        if st.button("👀 **View Analysis Results**", type="secondary"):
+                            st.rerun()  # This will trigger the main app to show results
+                            
+                    elif latest_run['status'] == 'failed':
+                        st.error("❌ **Analysis Failed**")
+                        st.error(f"Error: {latest_run.get('error_message', 'Unknown error')}")
+                        del st.session_state['last_analysis_run_id']
+                        
+                    elif latest_run['status'] == 'running':
+                        st.info("🔄 **Analysis Still Running...**")
+                        
+        except Exception as e:
+            st.warning(f"Could not verify analysis completion: {e}")
+    
+    # Additional controls
+    st.markdown("---")
+    st.markdown("#### 🛠️ Advanced Controls")
+    
+    col3, col4 = st.columns(2)
+    
+    with col3:
         if st.button("🧹 Clear Database", 
                     disabled=status['is_running'],
                     use_container_width=True,

@@ -28,6 +28,9 @@ try:
         show_dev_sidebar, init_progress_tracking
     )
     
+    # Import our new smart data manager
+    from streamlit_data_manager import data_manager
+    
     # Initialize database on startup
     init_database()
     
@@ -52,14 +55,37 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Apply custom CSS
-st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+# Apply custom CSS (safe fallback if empty)
+if CUSTOM_CSS and CUSTOM_CSS.strip():
+    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 def initialize_app():
-    """Initialize the application and configure services"""
+    """Initialize the application and configure services with smart caching"""
     try:
         # Initialize progress tracking for dev mode
         init_progress_tracking()
+        
+        # Initialize smart data manager for caching and background updates
+        if 'app_initialized' not in st.session_state:
+            st.session_state.app_initialized = True
+            
+            # Load previous analysis from database on startup (smart caching)
+            try:
+                with st.spinner("🔄 Loading previous analysis from database..."):
+                    latest_analysis = data_manager.load_latest_analysis_from_database()
+                    
+                if latest_analysis:
+                    # Cache in Streamlit for fast access
+                    st.session_state['cached_analysis'] = latest_analysis
+                    st.session_state['startup_data_loaded'] = True
+                    st.success(f"✅ Loaded analysis from {latest_analysis['completed_at'][:19]}")
+                else:
+                    st.session_state['startup_data_loaded'] = False
+                    st.info("ℹ️ No previous analysis found. Ready for new analysis.")
+                    
+            except Exception as e:
+                st.warning(f"⚠️ Could not load previous analysis: {str(e)}")
+                st.session_state['startup_data_loaded'] = False
         
         # Configure Google Sheets manager with default IDs
         sheets_manager = get_sheets_manager()
@@ -80,7 +106,7 @@ def initialize_app():
         return False
 
 def display_system_status():
-    """Display system status in sidebar"""
+    """Display system status in sidebar with smart caching info"""
     with st.sidebar:
         st.markdown("---")
         st.markdown("### 🖥️ System Status")
@@ -97,6 +123,16 @@ def display_system_status():
                 st.success("🟢 Database Connected")
             else:
                 st.error("🔴 Database Disconnected")
+            
+            # Smart caching status
+            if st.session_state.get('startup_data_loaded', False):
+                st.success("💾 Previous Analysis Cached")
+            else:
+                st.info("📭 No Cached Analysis")
+                st.caption("Tip: Run analysis from Developer Mode to generate fresh results.")
+            
+            # Background update status
+            data_manager.display_background_update_status()
             
             # Sheets sync status
             sheets_manager = get_sheets_manager()
@@ -118,9 +154,20 @@ def display_system_status():
             if questions_sync.get('completed_at'):
                 last_sync = pd.to_datetime(questions_sync['completed_at'])
                 st.info(f"📊 Last sync: {last_sync.strftime('%H:%M')}")
-            
+        
         except Exception as e:
-            st.error(f"❌ Status check failed")
+            st.error("❌ Status check failed")
+            # Fallback to basic database summary
+            try:
+                db_summary = data_manager.get_database_summary()
+                if db_summary['status'] == 'connected':
+                    st.success("🟢 Database Connected")
+                    st.metric("Questions", db_summary.get('questions', 0))
+                    st.metric("Topics", db_summary.get('topics', 0))
+                else:
+                    st.error("🔴 Database Error")
+            except Exception:
+                st.error("❌ Could not retrieve database summary")
 
 def main():
     """Main application entry point"""

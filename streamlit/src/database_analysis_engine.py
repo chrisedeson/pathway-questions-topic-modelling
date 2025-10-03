@@ -242,7 +242,7 @@ class DatabaseAnalysisEngine:
         finally:
             self.is_running = False
             self.current_run_id = None
-    
+
     async def _load_questions_from_sheets(self) -> pd.DataFrame:
         """Load questions data directly from Google Sheets"""
         try:
@@ -264,7 +264,7 @@ class DatabaseAnalysisEngine:
         except Exception as e:
             logger.error(f"Failed to load questions from Google Sheets: {e}")
             return pd.DataFrame()
-    
+
     async def _load_topics_data(self) -> pd.DataFrame:
         """Load topics data from Google Sheets"""
         try:
@@ -282,7 +282,7 @@ class DatabaseAnalysisEngine:
         except Exception as e:
             logger.warning(f"Failed to load topics data: {e}")
             return pd.DataFrame(columns=['Topic', 'Subtopic', 'Question'])
-    
+
     async def _store_embeddings(self, questions_df: pd.DataFrame, hybrid_results: Dict[str, Any]):
         """Store question embeddings in database"""
         embeddings = hybrid_results.get('embeddings', [])
@@ -298,7 +298,7 @@ class DatabaseAnalysisEngine:
                 question_embeddings.append((row['id'], embeddings[i]))
         
         self.data_service.store_embeddings(self.current_run_id, question_embeddings)
-    
+
     async def _store_clusters(self, hybrid_results: Dict[str, Any]) -> Dict[int, int]:
         """Store topic clusters and return mapping"""
         clusters = hybrid_results.get('clusters', [])
@@ -317,7 +317,7 @@ class DatabaseAnalysisEngine:
             })
         
         return self.data_service.store_topic_clusters(self.current_run_id, clusters_data)
-    
+
     async def _store_assignments(self, questions_df: pd.DataFrame, 
                                hybrid_results: Dict[str, Any], 
                                cluster_id_map: Dict[int, int]):
@@ -340,7 +340,7 @@ class DatabaseAnalysisEngine:
                     })
         
         self.data_service.store_question_assignments(self.current_run_id, assignments)
-    
+
     def _analyze_sentiment(self, questions_df: pd.DataFrame, 
                           hybrid_results: Dict[str, Any]) -> Dict[str, Any]:
         """Run sentiment analysis on questions and clusters"""
@@ -383,7 +383,7 @@ class DatabaseAnalysisEngine:
         except Exception as e:
             logger.error(f"Sentiment analysis failed: {e}")
             return {'error': str(e)}
-    
+
     def _analyze_trends(self, questions_df: pd.DataFrame, 
                        hybrid_results: Dict[str, Any]) -> Dict[str, Any]:
         """Run trend analysis on questions over time"""

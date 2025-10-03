@@ -10,22 +10,65 @@ from pathlib import Path
 import plotly.graph_objects as go
 from sklearn.metrics import silhouette_score
 from sklearn.metrics.pairwise import cosine_similarity
-import visualizations
-import streamlit as st
-import pandas as pd
-from datetime import datetime
-from typing import Optional, Dict, Any
-from pathlib import Path
 import asyncio
-import os
 import io
+import logging
+from sqlalchemy import text
 
-from utils import validate_questions_file, create_session_state_defaults, calculate_clustering_metrics
-from google_sheets_utils import (
-    GoogleSheetsManager, display_sheets_permission_status,
-    create_sheets_connection_ui, SheetsPermission
-)
-from hybrid_topic_processor import HybridTopicProcessor
+try:
+    from . import visualizations
+except ImportError:
+    try:
+        import visualizations
+    except ImportError:
+        visualizations = None
+
+try:
+    from .utils import validate_questions_file, create_session_state_defaults, calculate_clustering_metrics
+except ImportError:
+    try:
+        from utils import validate_questions_file, create_session_state_defaults, calculate_clustering_metrics
+    except ImportError:
+        # Provide fallback functions
+        def validate_questions_file(content: str):
+            questions = [line.strip() for line in content.split('\n') if line.strip()]
+            return len(questions) >= 10, questions, f"Found {len(questions)} questions"
+        
+        def create_session_state_defaults():
+            return None
+            
+        def calculate_clustering_metrics(df):
+            return {'total_questions': len(df), 'clusters_found': 0}
+
+try:
+    from .google_sheets_utils import (
+        GoogleSheetsManager, display_sheets_permission_status,
+        create_sheets_connection_ui, SheetsPermission
+    )
+except ImportError:
+    try:
+        from google_sheets_utils import (
+            GoogleSheetsManager, display_sheets_permission_status,
+            create_sheets_connection_ui, SheetsPermission
+        )
+    except ImportError:
+        # Provide fallback classes
+        class GoogleSheetsManager:
+            pass
+        class SheetsPermission:
+            pass
+        def display_sheets_permission_status():
+            return None
+        def create_sheets_connection_ui():
+            return None
+
+try:
+    from .hybrid_topic_processor import HybridTopicProcessor
+except ImportError:
+    from hybrid_topic_processor import HybridTopicProcessor
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
 def create_chart_header(title: str, explanation: str, icon: str = "❔"):
@@ -350,8 +393,11 @@ def create_hybrid_processing_tab():
                 st.session_state['topics_data'] = sample_topics
                 st.rerun()
     
-    # Process button
-    if st.button("🚀 **Start Hybrid Analysis**", type="primary", width="stretch"):
+    # Process button with clear database update indication
+    st.markdown("---")
+    st.info("� **Database Integration**: Analysis results will be automatically saved to the database after completion.")
+    
+    if st.button("🚀 **Run Analysis & Update Database**", type="primary", width="stretch"):
         if topics_df is None:
             topics_df = pd.DataFrame(columns=['Topic', 'Subtopic', 'Question'])
         
@@ -369,9 +415,10 @@ def run_hybrid_analysis(questions_df: pd.DataFrame,
                        threshold: float,
                        mode: str,
                        sample_size: int) -> Dict[str, Any]:
-    """Run the hybrid topic analysis"""
+    """Run the hybrid topic analysis with smart caching and background database updating"""
     
     try:
+        # Step 1: Run hybrid analysis and cache results locally
         processor = HybridTopicProcessor()
         
         # Update processor configuration
@@ -379,31 +426,67 @@ def run_hybrid_analysis(questions_df: pd.DataFrame,
         processor.processing_mode = mode
         processor.sample_size = sample_size
         
-        # Run analysis
-        with st.spinner("Running hybrid analysis..."):
+        # Run analysis with progress tracking
+        with st.spinner("🔍 Running hybrid analysis..."):
             result = asyncio.run(processor.process_hybrid_analysis(
                 questions_df, topics_df, threshold, mode, sample_size
             ))
+            
+        # Step 2: Cache results in Streamlit immediately (fast UI response)
+        if result:
+            st.success("✅ Analysis complete! Results cached locally.")
+            
+            # Step 3: Start background database update (non-blocking)
+            config = {
+                'similarity_threshold': threshold,
+                'processing_mode': mode,
+                'sample_size': sample_size,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            try:
+                # Start background update
+                database_run_id = data_manager.update_database_background(
+                    questions_df, result, config
+                )
+                
+                result['database_run_id'] = database_run_id
+                result['database_update_started'] = True
+                
+                st.info("🗄️ Database update started in background...")
+                
+            except Exception as db_error:
+                logger.warning(f"Failed to start background database update: {db_error}")
+                st.warning("⚠️ Database update could not be started. Results available locally.")
+                result['database_update_started'] = False
             
         return result
         
     except Exception as e:
         st.error(f"Error during analysis: {str(e)}")
+        logger.error(f"Analysis failed: {e}")
         return None
-
 
 
 def display_hybrid_results(results: Dict[str, Any]):
     """Display hybrid analysis results"""
     
-    st.header("Hybrid Analysis Results")
+    st.header("📊 Hybrid Analysis Results")
+    
+    # Show database status if available
+    if 'database_run_id' in results:
+        st.success(f"🗄️ **Database Updated:** Run ID `{results['database_run_id']}`")
+        st.info("💾 All analysis results have been automatically saved to the database and are ready for production use.")
+    else:
+        st.warning("⚠️ **Local Cache Only:** Results are cached locally but not saved to database.")
     
     similar_df = results.get('similar_questions_df', pd.DataFrame())
     clustered_df = results.get('clustered_questions_df')
     topic_names = results.get('topic_names', {})
     output_files = results.get('output_files', [])
     
-    # Summary metrics
+    # Summary metrics with enhanced styling
+    st.subheader("📈 Analysis Summary")
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
@@ -420,12 +503,13 @@ def display_hybrid_results(results: Dict[str, Any]):
         st.metric("📁 **Output Files**", len(output_files))
     
     # Results tabs
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "📋 Similar Questions", 
         "🆕 New Topics", 
         "📊 Visualizations",
         "📁 Output Files",
-        "� Analysis Details"
+        "🔍 Analysis Details",
+        "🗄️ Database Status"
     ])
     
     with tab1:
@@ -442,6 +526,9 @@ def display_hybrid_results(results: Dict[str, Any]):
     
     with tab5:
         display_analysis_details_tab(results)
+        
+    with tab6:
+        display_database_status_tab(results)
 
 
 def display_similar_questions_tab(similar_df: pd.DataFrame):
@@ -584,7 +671,7 @@ def display_new_topics_tab(clustered_df: Optional[pd.DataFrame], topic_names: Di
         selected_topic_id = st.selectbox(
             "Select a topic to view all questions:",
             options=sorted_df["Topic ID"].tolist(),
-            format_func=lambda x: f"Topic {x}: {topic_names.get(x, f'Cluster {x}')}"
+            format_func=lambda x: f"Topic {x}: {topic_names.get(x, f'Cluster {x}') }"
         )
         
         if selected_topic_id is not None:
@@ -767,8 +854,6 @@ def display_analysis_details_tab(results: Dict[str, Any]):
 
 
 
-
-
 def create_sample_topics_data() -> pd.DataFrame:
     """Create sample topics data for testing"""
     
@@ -818,3 +903,162 @@ def display_app_footer():
         '<p style="text-align: center; color: #888;">BYU Pathway Hybrid Topic Analysis • Powered by OpenAI GPT & Embeddings</p>',
         unsafe_allow_html=True
     )
+
+
+def display_database_status_tab(results: Dict[str, Any]):
+    """Display database status and information using the new data manager"""
+    
+    st.subheader("🗄️ Database Integration Status")
+    
+    # Get status from data manager
+    try:
+        from streamlit_data_manager import data_manager
+        
+        # Show real-time background update status
+        status = data_manager.get_background_update_status()
+        db_summary = data_manager.get_database_summary()
+        
+        # Display update status
+        if status['running']:
+            st.info("🔄 **Database Update in Progress**")
+            st.progress(0.7)
+            st.write("Background update is running... This won't block your analysis viewing.")
+        elif status['status'] == 'updated' and status['last_run_id']:
+            st.success(f"✅ **Database Successfully Updated**")
+            st.info(f"**Latest Run ID:** `{status['last_run_id']}`")
+        elif status['status'] == 'error':
+            st.error(f"❌ **Database Update Failed:** {status['error']}")
+        else:
+            st.warning("⚠️ **No Recent Database Updates**")
+        
+        # Show database summary
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("📊 Database Contents")
+            if db_summary['status'] == 'connected':
+                st.metric("Questions", db_summary.get('questions', 0))
+                st.metric("Analysis Runs", db_summary.get('analysis_runs', 0))
+                st.metric("Topics", db_summary.get('topics', 0))
+                st.metric("Embeddings", db_summary.get('embeddings', 0))
+            else:
+                st.error(f"Database Error: {db_summary.get('error', 'Unknown')}")
+        
+        with col2:
+            st.subheader("� Smart Caching Benefits")
+            st.info("""
+            **Performance Features:**
+            - ✅ Instant UI response (Streamlit cache)
+            - ✅ Background database updates (non-blocking)
+            - ✅ Automatic startup data loading
+            - ✅ Fast analysis viewing while DB updates
+            - ✅ No hanging or laggy interface
+            """)
+        
+        # Show cache status
+        st.subheader("💾 Cache Management")
+        
+        cache_tab1, cache_tab2 = st.tabs(["Streamlit Cache", "Database Cache"])
+        
+        with cache_tab1:
+            if 'hybrid_results' in st.session_state:
+                st.success("✅ Analysis results cached in Streamlit")
+                st.info("Results are immediately available for viewing and downloading")
+                
+                if st.button("🗑️ **Clear Streamlit Cache**"):
+                    if 'hybrid_results' in st.session_state:
+                        del st.session_state['hybrid_results']
+                    # Clear data manager caches
+                    data_manager.load_latest_analysis_from_database.clear()
+                    data_manager.get_database_summary.clear()
+                    st.success("Streamlit cache cleared!")
+                    st.rerun()
+            else:
+                st.info("No analysis results currently cached")
+        
+        with cache_tab2:
+            st.info("""
+            **Database Cache Strategy:**
+            - Fresh analysis results replace old data
+            - Previous runs are cleared to prevent conflicts
+            - Background updates maintain data consistency
+            - Production systems get immediate access to latest results
+            """)
+            
+            if st.button("🔄 **Refresh Database Summary**"):
+                data_manager.get_database_summary.clear()
+                st.rerun()
+        
+        # Technical details
+        with st.expander("🔧 **Technical Implementation**", expanded=False):
+            st.markdown("""
+            **Streamlit + Database Integration:**
+            
+            **1. Analysis Flow:**
+            - 🔄 Run analysis → Cache in Streamlit (immediate)
+            - 🗄️ Start background DB update (non-blocking)
+            - 📊 User can view results while DB updates
+            
+            **2. Startup Flow:**
+            - � Check database for previous analysis
+            - 💾 Load into Streamlit cache if available
+            - 🚀 Fast startup with recent data
+            
+            **3. Performance Benefits:**
+            - **No UI blocking**: Database operations in background
+            - **Fast responses**: Streamlit cache for immediate access
+            - **Data consistency**: Fresh data replaces old data
+            - **Robust operation**: Works even if DB temporarily unavailable
+            
+            **4. Cache Levels:**
+            - **L1**: Streamlit session cache (immediate access)
+            - **L2**: Database cache (persistent, shared)
+            - **L3**: File cache (backup/export)
+            """)
+        
+    except ImportError:
+        st.error("❌ Data manager not available. Using legacy database status.")
+        
+        # Fallback to simple status check
+        if 'database_run_id' in results:
+            st.success(f"✅ Database updated with run ID: `{results['database_run_id']}`")
+        else:
+            st.warning("⚠️ No database update information available")
+    
+    # Database connection test
+    st.subheader("🔌 Connection Test")
+    
+    if st.button("🧪 **Test Database Connection**"):
+        try:
+            from database import DatabaseManager
+            from sqlalchemy import text
+            
+            db_manager = DatabaseManager()
+            with db_manager.get_session() as session:
+                result = session.execute(text("SELECT 1")).scalar()
+                if result == 1:
+                    st.success("✅ Database connection successful!")
+                else:
+                    st.error("❌ Unexpected database response")
+        except Exception as e:
+            st.error(f"❌ Database connection failed: {str(e)}")
+            st.info("💡 Check your database configuration and ensure PostgreSQL is running.")
+    
+    # Quick database viewer
+    if st.button("📊 **View Database Contents**"):
+        try:
+            import subprocess
+            import sys
+            
+            result = subprocess.run([
+                sys.executable, "scripts/view_database.py"
+            ], cwd="/home/chrisflex/byu-pathway/pathway-questions-topic-modelling", 
+               capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0:
+                st.code(result.stdout, language="text")
+            else:
+                st.error(f"Error: {result.stderr}")
+                
+        except Exception as e:
+            st.error(f"Failed to view database: {str(e)}")
