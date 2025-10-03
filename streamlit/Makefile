@@ -30,11 +30,6 @@ activate: ## Show command to activate virtual environment
 	@echo "To activate the virtual environment, run:"
 	@echo "source $(VENV_PATH)/bin/activate"
 
-run-notebook: ## Start Jupyter notebook server
-	@echo "🚀 Starting Jupyter notebook server..."
-	@if [ ! -d "$(VENV_PATH)" ]; then echo "❌ Virtual environment not found. Run 'make install' first."; exit 1; fi
-	$(JUPYTER) notebook --ip=0.0.0.0 --port=8888 --no-browser --allow-root
-
 run-lab: ## Start JupyterLab server
 	@echo "🚀 Starting JupyterLab server..."
 	@if [ ! -d "$(VENV_PATH)" ]; then echo "❌ Virtual environment not found. Run 'make install' first."; exit 1; fi
