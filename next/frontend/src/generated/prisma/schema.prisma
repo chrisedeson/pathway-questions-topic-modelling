@@ -1,0 +1,203 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Core entity models
+model Question {
+  id           String   @id @default(cuid())
+  text         String   @db.Text
+  originalText String?  @db.Text // Store original uncleaned text
+  embedding    Float[] // Vector embedding
+  language     String   @default("en")
+  country      String?
+  state        String?
+  userId       String? // For tracking user sessions
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Analysis relationships
+  topicAssignments TopicAssignment[]
+  clusterResults   ClusterResult[]
+
+  @@index([createdAt])
+  @@index([country])
+  @@index([state])
+  @@index([language])
+  @@map("questions")
+}
+
+model Topic {
+  id            String   @id @default(cuid())
+  name          String
+  description   String?  @db.Text
+  subtopic      String?
+  isSystemTopic Boolean  @default(false) // True for Elder Edwards' curated topics
+  isActive      Boolean  @default(true)
+  embedding     Float[] // Vector embedding for the topic
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  topicAssignments TopicAssignment[]
+
+  @@index([isSystemTopic])
+  @@index([isActive])
+  @@map("topics")
+}
+
+model TopicAssignment {
+  id              String         @id @default(cuid())
+  questionId      String         @map("question_id")
+  topicId         String         @map("topic_id")
+  similarityScore Float? // Cosine similarity score
+  assignmentType  AssignmentType // How this assignment was made
+  confidence      Float? // Confidence score from 0-1
+  analysisRunId   String         @map("analysis_run_id")
+  createdAt       DateTime       @default(now()) @map("created_at")
+
+  // Relationships
+  question    Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  topic       Topic       @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  analysisRun AnalysisRun @relation(fields: [analysisRunId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, topicId, analysisRunId])
+  @@index([analysisRunId])
+  @@index([assignmentType])
+  @@map("topic_assignments")
+}
+
+model ClusterResult {
+  id            String   @id @default(cuid())
+  questionId    String   @map("question_id")
+  clusterId     Int
+  clusterName   String?
+  analysisRunId String   @map("analysis_run_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  // Relationships
+  question    Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  analysisRun AnalysisRun @relation(fields: [analysisRunId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, analysisRunId])
+  @@index([clusterId])
+  @@index([analysisRunId])
+  @@map("cluster_results")
+}
+
+model AnalysisRun {
+  id                  String         @id @default(cuid())
+  status              AnalysisStatus @default(PENDING)
+  mode                String // "sample" or "all"
+  sampleSize          Int?
+  similarityThreshold Float
+  embeddingModel      String
+  gptModel            String
+  totalQuestions      Int?
+  matchedQuestions    Int?
+  newTopicsFound      Int?
+  processingTimeMs    Int?
+  errorMessage        String?        @db.Text
+  startedAt           DateTime       @default(now()) @map("started_at")
+  completedAt         DateTime?      @map("completed_at")
+  createdBy           String? // Developer who initiated the run
+
+  // Configuration snapshot
+  config Json? // Store the exact configuration used
+
+  // Relationships
+  topicAssignments TopicAssignment[]
+  clusterResults   ClusterResult[]
+
+  @@index([status])
+  @@index([startedAt])
+  @@map("analysis_runs")
+}
+
+// System configuration and settings
+model SystemConfig {
+  id        String     @id @default(cuid())
+  key       String     @unique
+  value     String     @db.Text
+  type      ConfigType @default(STRING)
+  updatedAt DateTime   @updatedAt @map("updated_at")
+  updatedBy String?    @map("updated_by")
+
+  @@map("system_config")
+}
+
+// User sessions for tracking and analytics
+model UserSession {
+  id           String   @id @default(cuid())
+  sessionId    String   @unique @map("session_id")
+  userId       String?  @map("user_id")
+  isDevSession Boolean  @default(false) @map("is_dev_session")
+  ipAddress    String?  @map("ip_address")
+  userAgent    String?  @map("user_agent")
+  country      String?
+  region       String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  lastActivity DateTime @default(now()) @map("last_activity")
+
+  @@index([sessionId])
+  @@index([isDevSession])
+  @@index([createdAt])
+  @@map("user_sessions")
+}
+
+// Data sync tracking for Google Sheets
+model DataSync {
+  id               String     @id @default(cuid())
+  source           String // "questions_sheet", "topics_sheet"
+  sourceUrl        String? // Google Sheets URL
+  lastSyncAt       DateTime   @map("last_sync_at")
+  status           SyncStatus @default(PENDING)
+  recordsProcessed Int?       @map("records_processed")
+  recordsAdded     Int?       @map("records_added")
+  recordsUpdated   Int?       @map("records_updated")
+  errorMessage     String?    @map("error_message") @db.Text
+
+  @@index([source])
+  @@index([lastSyncAt])
+  @@map("data_syncs")
+}
+
+// Enums
+enum AssignmentType {
+  SIMILARITY_MATCH // Assigned based on similarity to existing topic
+  CLUSTER_DISCOVERY // Assigned through clustering/topic discovery
+  MANUAL_ASSIGNMENT // Manually assigned by user
+}
+
+enum AnalysisStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum SyncStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum ConfigType {
+  STRING
+  NUMBER
+  BOOLEAN
+  JSON
+}
