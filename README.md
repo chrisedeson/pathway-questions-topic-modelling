@@ -1,25 +1,63 @@
-# Hybrid Topic Analysis
+# BYU Pathway Topic Analysis - Streamlit Dashboard v2.0.0
 
-AI-powered hybrid topic modeling system that combines similarity-based classification with clustering to analyze student questions and manage topic taxonomies.
+This project has been reorganized into two versions:
 
-## Quick Start
+## 📁 Repository Structure
 
-```bash
-# 1. Clone and setup
-git clone https://github.com/chrisedeson/pathway-questions-topic-modelling
-cd pathway-questions-topic-modelling
-make install
-
-# 2. Configure API key
-cp .env.template .env
-# Edit .env with your OpenAI API key
-
-# 3. Activate the virtual environment
-source .venv/bin/activate
-
-# 4. Run the application
-make run
 ```
+pathway-questions-topic-modelling/
+├── v1.0.0/                    # Original version (archived)
+│   ├── streamlit_app.py
+│   ├── src/
+│   └── ...
+│
+├── v2.0.0/                    # NEW Professional Dashboard
+│   ├── app.py                 # Main entry point
+│   ├── config.py              # Configuration
+│   ├── pages/                 # Multi-page app
+│   │   ├── 1_📋_Questions_Table.py
+│   │   ├── 2_📈_Trends_&_Analytics.py
+│   │   └── 3_🆕_New_Topics.py
+│   ├── utils/                 # Utility modules
+│   │   ├── data_loader.py
+│   │   └── visualizations.py
+│   ├── requirements.txt
+│   └── README.md              # Detailed v2 documentation
+│
+├── notebook/                  # Jupyter notebooks for processing
+│   ├── Hybrid_Topic_Discovery_and_Classification_with_AWS_Integration.ipynb
+│   ├── fix_gpt5_config.ipynb
+│   └── ...
+│
+├── .env                       # Environment variables (AWS, OpenAI)
+└── README.md                  # This file
+```
+
+## 🚀 Quick Start - v2.0.0 Dashboard
+
+### 1. Run the Notebook
+Process questions and upload results to S3:
+```bash
+# Open the main notebook
+jupyter notebook notebook/Hybrid_Topic_Discovery_and_Classification_with_AWS_Integration.ipynb
+
+# Run all cells to:
+# - Load questions from Langfuse CSV
+# - Process topics with GPT-5
+# - Upload results to S3
+```
+
+### 2. Launch the Dashboard
+```bash
+cd v2.0.0
+streamlit run app.py
+```
+
+### 3. Explore the Dashboard
+- **Home**: Overview with KPIs
+- **Questions Table**: Interactive filtering and search
+- **Trends & Analytics**: Visualizations and insights
+- **New Topics**: Explore discovered topics
 
 ## Features
 
