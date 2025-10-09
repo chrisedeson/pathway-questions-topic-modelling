@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config import PAGE_CONFIG
+from config import PAGE_CONFIG, get_theme_css
 from utils.data_loader import ensure_data_loaded
 from utils.visualizations import (
     create_kpi_cards, plot_classification_distribution, plot_country_distribution,
@@ -18,6 +18,11 @@ from utils.visualizations import (
 
 # Configure page settings (needed for direct page access)
 st.set_page_config(**PAGE_CONFIG)
+
+# Apply theme
+if 'theme' not in st.session_state:
+    st.session_state.theme = 'light'
+st.markdown(get_theme_css(st.session_state.theme), unsafe_allow_html=True)
 
 
 def main():

@@ -128,77 +128,453 @@ SORT_OPTIONS = {
 CACHE_TTL = 3600  # Cache data for 1 hour (in seconds)
 
 # ============ Styling ============
-CUSTOM_CSS = """
+def get_theme_css(theme='light'):
+    """Get theme-specific CSS"""
+    if theme == 'dark':
+        return """
 <style>
+    /* ==================== DARK THEME ==================== */
+    
+    /* Main background - Dark Theme */
+    .stApp {
+        background-color: #0d1117 !important;
+    }
+    
+    .main {
+        background-color: #0d1117 !important;
+    }
+    
     /* Main container */
     .main > div {
         padding-top: 2rem;
     }
     
-    /* Metrics */
+    /* Metrics - Dark Theme */
     [data-testid="stMetricValue"] {
         font-size: 2rem;
         font-weight: 600;
+        color: #FFB933 !important;
     }
     
-    /* Headers */
+    [data-testid="stMetricLabel"] {
+        color: #b0b0b0 !important;
+    }
+    
+    [data-testid="stMetricDelta"] {
+        color: #4caf50 !important;
+    }
+    
+    /* Headers - Dark Theme */
     h1 {
-        color: #002E5D;
+        color: #FFB933 !important;
         font-weight: 700;
     }
     
     h2 {
-        color: #002E5D;
+        color: #FFB933 !important;
         font-weight: 600;
         margin-top: 1.5rem;
     }
     
-    h3 {
-        color: #666;
+    h3, h4 {
+        color: #b0b0b0 !important;
         font-weight: 500;
     }
     
-    /* Tables */
+    /* Sidebar - Dark Theme */
+    /* Slightly lighter than main background so controls stand out */
+    [data-testid="stSidebar"] {
+        background-color: #121418 !important; /* lighter than #0d1117 */
+        border-right: 1px solid rgba(255,255,255,0.03) !important;
+    }
+
+    /* Sidebar content text */
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] {
+        color: #e6e6e6 !important;
+    }
+
+    /* Sidebar navigation items */
+    [data-testid="stSidebar"] a, 
+    [data-testid="stSidebar"] .css-1d391kg {
+        color: #cfe8ff !important; /* subtle bluish highlight */
+    }
+
+    /* Sidebar section labels */
+    [data-testid="stSidebar"] label {
+        color: #b8c3cc !important;
+    }
+    
+    /* General text color for dark mode */
+    p, span, div {
+        color: #e0e0e0 !important;
+    }
+
+    /* Top banner selectors (from inspector) */
+    header.stAppHeader, .stAppToolbar, .stAppHeader {
+        background-color: #0b0f12 !important;
+        color: #e6e6e6 !important;
+        border-bottom: 1px solid rgba(255,255,255,0.03) !important;
+    }
+    
+    /* Info/Success/Warning boxes - Dark Theme */
+    [data-testid="stAlert"] {
+        background-color: #1a2332 !important;
+        color: #e0e0e0 !important;
+    }
+    
+    /* Buttons - Dark Theme */
+    /* Very high-specificity selectors to override Streamlit's generated classes and inline-ish styles */
+    :root [data-testid="stAppViewContainer"] [data-testid="stButton"] > button,
+    :root [data-testid="stAppViewContainer"] .stButton > button,
+    body [data-testid="stSidebar"] .stButton > button,
+    body [data-testid="stSidebar"] button,
+    [class^="css-"] .stButton > button,
+    [class*="css-"] .stButton > button,
+    [class^="css-"] button[data-baseweb],
+    button[role="button"],
+    input[type="button"],
+    input[type="submit"],
+    .stButton > button,
+    .stButton button,
+    .stDownloadButton > button {
+        background-color: rgba(0,0,0,0.48) !important; /* stronger darker card */
+        color: #fafbfc !important; /* very light text for max contrast */
+        font-weight: 600 !important;
+        border-radius: 6px !important;
+        border: 1px solid rgba(255,255,255,0.03) !important;
+        padding: 0.55rem 1.1rem !important;
+        box-shadow: none !important;
+        transition: all 0.16s ease-in-out !important;
+    }
+
+    /* Sidebar-only even stronger background to ensure separation from main */
+    [data-testid="stSidebar"] .stButton > button,
+    [data-testid="stSidebar"] button {
+        background-color: rgba(0,0,0,0.55) !important;
+        color: #ffffff !important;
+        border: 1px solid rgba(255,255,255,0.02) !important;
+    }
+
+    /* Hover / focus states keep BYU gold accent but readable on dark bg */
+    :root [data-testid="stAppViewContainer"] .stButton > button:hover,
+    :root [data-testid="stAppViewContainer"] .stButton > button:focus,
+    [data-testid="stSidebar"] .stButton > button:hover,
+    [data-testid="stSidebar"] button:hover,
+    .stDownloadButton > button:hover,
+    button[role="button"]:hover,
+    input[type="submit"]:hover,
+    input[type="button"]:hover {
+        background-color: rgba(255,185,51,0.10) !important; /* more visible gold tint */
+        color: #FFB933 !important;
+        border-color: rgba(255,185,51,0.20) !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important;
+    }
+
+    /* Disabled states */
+    :root [data-testid="stAppViewContainer"] .stButton > button[disabled],
+    :root [data-testid="stAppViewContainer"] .stButton > button[aria-disabled="true"],
+    [data-testid="stSidebar"] .stButton > button[disabled],
+    [data-testid="stSidebar"] .stButton > button[aria-disabled="true"],
+    button[disabled],
+    input[disabled] {
+        background-color: rgba(255,255,255,0.02) !important;
+        color: rgba(255,255,255,0.35) !important;
+        border-color: rgba(255,255,255,0.02) !important;
+        cursor: not-allowed !important;
+        box-shadow: none !important;
+    }
+
+    /* Primary filled buttons keep BYU gold */
+    :root .stButton > button.primary, :root .stButton > button[data-primary="true"],
+    .stButton > button.primary, .stButton > button[data-primary="true"] {
+        background-color: #FFB933 !important;
+        color: #081224 !important;
+        border: none !important;
+    }
+
+    :root .stButton > button.primary:hover, :root .stButton > button[data-primary="true"]:hover,
+    .stButton > button.primary:hover, .stButton > button[data-primary="true"]:hover {
+        background-color: #ffca5f !important;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important;
+        transform: translateY(-1px) !important;
+    }
+
+    /* Final catch-all: force all button-like elements inside the app and sidebar */
+    [data-testid="stAppViewContainer"] button,
+    [data-testid="stAppViewContainer"] button[class*="css-"],
+    [data-testid="stAppViewContainer"] button[style],
+    [data-testid="stSidebar"] button,
+    [data-testid="stSidebar"] button[class*="css-"],
+    [data-testid="stSidebar"] button[style],
+    [data-testid="stAppViewContainer"] [role="button"],
+    [data-testid="stSidebar"] [role="button"],
+    [data-testid="stAppViewContainer"] input[type="button"],
+    [data-testid="stAppViewContainer"] input[type="submit"],
+    [data-testid="stSidebar"] input[type="button"],
+    [data-testid="stSidebar"] input[type="submit"] {
+        background-color: rgba(0,0,0,0.55) !important;
+        color: #ffffff !important;
+        border: 1px solid rgba(255,255,255,0.02) !important;
+        box-shadow: none !important;
+        padding: 0.45rem 0.9rem !important;
+    }
+    
+    /* Download button - Dark Theme */
+    .stDownloadButton > button {
+        background-color: #FFB933 !important;
+        color: #002E5D !important;
+    }
+    
+    .stDownloadButton > button:hover {
+        background-color: #ffc44d !important;
+    }
+    
+    /* Tables & chart backgrounds - Dark Theme */
     .dataframe {
         font-size: 0.9rem;
+        background-color: #17181a !important; /* slightly darker */
+        color: #e6e6e6 !important;
+    }
+    /* Plotly charts (divs) - give them a slightly darker panel */
+    .js-plotly-plot, .plotly, [data-testid="stPlotlyChart"] {
+        background-color: #0f1214 !important;
+        border-radius: 8px !important;
     }
     
-    /* Sidebar */
+    /* Text inputs - Dark Theme */
+    [data-testid="stTextInput"] input {
+        background-color: #262626 !important;
+        color: #e0e0e0 !important;
+        border-color: #404040 !important;
+    }
+    
+    /* Select boxes / Dropdowns - Dark Theme */
+    /* Control (the closed select) */
+    [data-testid="stSelectbox"] {
+        color: #e6e6e6 !important;
+    }
+    [data-testid="stSelectbox"] .stSelectbox,
+    [data-testid="stSelectbox"] div[role="button"],
+    [data-testid="stSelectbox"] select,
+    [data-testid="stSelectbox"] .css-1d391kg,
+    [data-testid="stSelectbox"] .css-1wa3eu0-placeholder {
+        background-color: rgba(0,0,0,0.50) !important;
+        color: #e6e6e6 !important;
+        border: 1px solid rgba(255,255,255,0.03) !important;
+        border-radius: 6px !important;
+        padding: 0.45rem 0.8rem !important;
+    }
+
+    /* Dropdown panel (the opened options list) */
+    [data-testid="stSelectbox"] [role="listbox"],
+    [data-testid="stSelectbox"] .css-1b3oln4,
+    .stSelectbox [role="listbox"],
+    .stSelectbox ul,
+    .stSelectbox .css-1t5f0fr {
+        background-color: #0f1214 !important; /* panel background */
+        color: #e6e6e6 !important;
+        border: 1px solid rgba(255,255,255,0.03) !important;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.6) !important;
+    }
+
+    /* Options */
+    [data-testid="stSelectbox"] [role="option"],
+    .stSelectbox li,
+    .stSelectbox .css-1n76uvr {
+        color: #dfe7ee !important;
+        background-color: transparent !important;
+        padding: 0.45rem 0.8rem !important;
+    }
+
+    /* Hover and focus on options */
+    [data-testid="stSelectbox"] [role="option"]:hover,
+    .stSelectbox li:hover,
+    .stSelectbox .css-1n76uvr:hover {
+        background-color: rgba(255,185,51,0.08) !important; /* gold tint */
+        color: #FFB933 !important;
+    }
+
+    /* Selected option */
+    [data-testid="stSelectbox"] [aria-selected="true"],
+    .stSelectbox li[aria-selected="true"] {
+        background-color: rgba(255,185,51,0.12) !important;
+        color: #FFB933 !important;
+    }
+
+    /* Make the caret/chevron visible */
+    [data-testid="stSelectbox"] svg,
+    [data-testid="stSelectbox"] .css-8mmkcg svg {
+        fill: #e6e6e6 !important;
+        color: #e6e6e6 !important;
+    }
+
+    /* Portal/overlay dropdowns often get rendered at body level with generated css- classes.
+       Force any listbox/menu panels appended to body to be dark so large dropdowns are not white. */
+    body div[role="listbox"],
+    body .react-select__menu,
+    body [class*="react-select__menu"],
+    body [class*="css-"] [role="listbox"],
+    body [class*="css-"] .react-select__menu,
+    body .css-1b3oln4,
+    body .css-1n76uvr,
+    body .css-1t5f0fr,
+    body .css-1pahdxg-control,
+    body .css-1wa3eu0 {
+        background-color: #0b0f12 !important; /* darker than before */
+        color: #e6e6e6 !important;
+        border: 1px solid rgba(255,255,255,0.03) !important;
+        box-shadow: 0 12px 36px rgba(0,0,0,0.75) !important;
+    }
+
+    /* Options inside portal panels */
+    body [role="option"],
+    body .react-select__option,
+    body [class*="css-"] [role="option"],
+    body .css-1n76uvr {
+        background-color: transparent !important;
+        color: #dfe7ee !important;
+    }
+
+    body [role="option"]:hover,
+    body .react-select__option--is-focused,
+    body [class*="css-"] [role="option"]:hover,
+    body .css-1n76uvr:hover {
+        background-color: rgba(255,185,51,0.10) !important;
+        color: #FFB933 !important;
+    }
+
+    /* Strong descendant overrides: force any nested children inside dropdown panels to inherit dark bg and light text.
+       This addresses components that apply backgrounds/colors to inner elements (e.g., generated css-* children). */
+    body [role="listbox"],
+    body [role="listbox"] *,
+    body [class*="react-select__menu"],
+    body [class*="react-select__menu"] *,
+    body [class*="css-"] [role="listbox"],
+    body [class*="css-"] [role="listbox"] *,
+    [data-testid="stSelectbox"],
+    [data-testid="stSelectbox"] *,
+    .stSelectbox [role="listbox"],
+    .stSelectbox [role="listbox"] * {
+        background-color: #0b0f12 !important;
+        color: #e6e6e6 !important;
+    }
+
+    /* Aggressive catch-all: any element with a 'css-' class anywhere inside body or inside a selectbox will be darkened.
+       This helps override components that render inner white cards using generated classes. */
+    body [class*="css-"] *,
+    [data-testid="stSelectbox"] [class*="css-"] *,
+    .stSelectbox [class*="css-"] * {
+        background-color: #0b0f12 !important;
+        color: #e6e6e6 !important;
+    }
+
+    /* Specific: force native select/option elements and multiselect option chips to dark */
+    [data-testid="stSelectbox"] select,
+    [data-testid="stSelectbox"] option,
+    .stSelectbox select,
+    .stSelectbox option,
+    [data-testid="stMultiselect"] select,
+    [data-testid="stMultiselect"] option,
+    .stMultiselect select,
+    .stMultiselect option,
+    .stMultiSelect, .stMultiSelect * {
+        background-color: #0b0f12 !important;
+        color: #e6e6e6 !important;
+    }
+
+    /* Calendar / date picker popups (common libs Streamlit may use) */
+    body .flatpickr-calendar,
+    body .flatpickr-wrapper,
+    body .react-datepicker,
+    body .react-datepicker__popper,
+    body .react-datepicker__triangle,
+    body .react-datepicker__month-container,
+    body .rdp,
+    body .rdp * {
+        background-color: #0b0f12 !important;
+        color: #e6e6e6 !important;
+        border: 1px solid rgba(255,255,255,0.03) !important;
+        box-shadow: 0 12px 36px rgba(0,0,0,0.75) !important;
+    }
+
+    /* Calendar day cells and hover/selected states */
+    body .flatpickr-day,
+    body .react-datepicker__day,
+    body .rdp-day {
+        background-color: transparent !important;
+        color: #dfe7ee !important;
+    }
+
+    body .flatpickr-day:hover,
+    body .react-datepicker__day:hover,
+    body .react-datepicker__day--selected,
+    body .react-datepicker__day--keyboard-selected,
+    body .rdp-day:hover,
+    body .rdp-day_selected {
+        background-color: rgba(255,185,51,0.12) !important;
+        color: #FFB933 !important;
+    }
+    
+    /* Expander - Dark Theme */
+    [data-testid="stExpander"] {
+        background-color: #262626 !important;
+        border-color: #404040 !important;
+    }
+    
+    /* Hide Streamlit branding */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+</style>
+"""
+    else:
+        # Light theme (default)
+        return """
+<style>
+    /* ==================== LIGHT THEME ==================== */
+    
+    /* Main container */
+    .main > div {
+        padding-top: 2rem;
+    }
+    
+    /* Metrics - Light Theme */
+    [data-testid="stMetricValue"] {
+        font-size: 2rem;
+        font-weight: 600;
+        color: #002E5D !important;
+    }
+    
+    [data-testid="stMetricLabel"] {
+        color: #666 !important;
+    }
+    
+    /* Headers - Light Theme */
+    h1 {
+        color: #002E5D !important;
+        font-weight: 700;
+    }
+    
+    h2 {
+        color: #002E5D !important;
+        font-weight: 600;
+        margin-top: 1.5rem;
+    }
+    
+    h3, h4 {
+        color: #666 !important;
+        font-weight: 500;
+    }
+    
+    /* Sidebar - Light Theme */
     [data-testid="stSidebar"] {
-        background-color: #f8f9fa;
+        background-color: #f8f9fa !important;
     }
     
-    /* Info boxes */
-    .info-box {
-        background-color: #e7f3ff;
-        border-left: 4px solid #002E5D;
-        padding: 1rem;
-        margin: 1rem 0;
-        border-radius: 4px;
-    }
-    
-    /* Warning boxes */
-    .warning-box {
-        background-color: #fff4e5;
-        border-left: 4px solid #ff9800;
-        padding: 1rem;
-        margin: 1rem 0;
-        border-radius: 4px;
-    }
-    
-    /* Success boxes */
-    .success-box {
-        background-color: #e8f5e9;
-        border-left: 4px solid #4caf50;
-        padding: 1rem;
-        margin: 1rem 0;
-        border-radius: 4px;
-    }
-    
-    /* Buttons */
+    /* Buttons - Light Theme */
     .stButton > button {
-        background-color: #002E5D;
-        color: white;
+        background-color: #002E5D !important;
+        color: white !important;
         font-weight: 500;
         border-radius: 4px;
         border: none;
@@ -207,17 +583,23 @@ CUSTOM_CSS = """
     }
     
     .stButton > button:hover {
-        background-color: #004080;
+        background-color: #004080 !important;
         box-shadow: 0 4px 8px rgba(0,0,0,0.2);
     }
     
-    /* Cards */
-    .metric-card {
-        background: white;
-        padding: 1.5rem;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        border-left: 4px solid #002E5D;
+    /* Download button - Light Theme */
+    .stDownloadButton > button {
+        background-color: #002E5D !important;
+        color: white !important;
+    }
+    
+    .stDownloadButton > button:hover {
+        background-color: #004080 !important;
+    }
+    
+    /* Tables - Light Theme */
+    .dataframe {
+        font-size: 0.9rem;
     }
     
     /* Hide Streamlit branding */
@@ -225,6 +607,9 @@ CUSTOM_CSS = """
     footer {visibility: hidden;}
 </style>
 """
+
+# Keep CUSTOM_CSS for backward compatibility (defaults to light theme)
+CUSTOM_CSS = get_theme_css('light')
 
 # ============ Chart Colors ============
 BYU_COLORS = {

@@ -13,14 +13,21 @@ from datetime import datetime
 # Add utils to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from config import PAGE_CONFIG, CUSTOM_CSS
+from config import PAGE_CONFIG, get_theme_css
 from utils.data_loader import load_data_from_s3, merge_data_for_dashboard, calculate_kpis, get_latest_file_info
 
 
 def configure_page():
     """Configure Streamlit page settings"""
     st.set_page_config(**PAGE_CONFIG)
-    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+    
+    # Initialize theme in session state
+    if 'theme' not in st.session_state:
+        st.session_state.theme = 'light'
+    
+    # Apply theme-specific CSS
+    from config import get_theme_css
+    st.markdown(get_theme_css(st.session_state.theme), unsafe_allow_html=True)
 
 
 def main():
@@ -98,8 +105,17 @@ def main():
     💡 **Tip:** All filters and sorting happen instantly without page refresh!
     """)
     
-    # Sidebar - Refresh button at the bottom
+    # Sidebar - Theme toggle and Refresh button at the bottom
     st.sidebar.markdown("---")
+    
+    # Theme toggle
+    current_theme = st.session_state.get('theme', 'light')
+    theme_label = "🌙 Dark Mode" if current_theme == 'light' else "☀️ Light Mode"
+    if st.sidebar.button(theme_label, help="Toggle between light and dark themes", use_container_width=True):
+        st.session_state.theme = 'dark' if current_theme == 'light' else 'light'
+        st.rerun()
+    
+    # Refresh data button
     if st.sidebar.button("🔄 Refresh Data", help="Clear cache and reload data from S3", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
