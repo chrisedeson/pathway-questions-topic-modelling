@@ -1,4 +1,4 @@
-# BYU Pathway Topic Analysis Dashboard v2.0.0
+# BYU Pathway Missionary Question Analysis Dashboard v2.0.0
 
 A professional, scalable Streamlit dashboard for analyzing student questions and discovering topics.
 
