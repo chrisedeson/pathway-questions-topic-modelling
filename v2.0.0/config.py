@@ -4,12 +4,39 @@ Configuration settings for BYU Pathway Topic Analysis Dashboard v2.0.0
 
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file in project root
+env_path = Path(__file__).parent.parent / '.env'
+load_dotenv(dotenv_path=env_path)
+
+# Try to import streamlit for secrets (fallback if .env doesn't work)
+try:
+    import streamlit as st
+    _st_available = True
+except ImportError:
+    _st_available = False
 
 # ============ AWS S3 Configuration ============
-AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "")
-AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "")
-AWS_S3_BUCKET = os.getenv("AWS_S3_BUCKET", "byupathway-public")
-AWS_S3_PREFIX = os.getenv("AWS_S3_PREFIX", "topic-modeling-data")
+# Try .env first, then Streamlit secrets, then empty string
+def get_config(key, default=""):
+    """Get configuration from .env or Streamlit secrets"""
+    # First try environment variable
+    value = os.getenv(key, "")
+    if value:
+        return value
+    # Then try Streamlit secrets
+    if _st_available:
+        try:
+            return st.secrets.get(key, default)
+        except:
+            pass
+    return default
+
+AWS_ACCESS_KEY_ID = get_config("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = get_config("AWS_SECRET_ACCESS_KEY")
+AWS_S3_BUCKET = get_config("AWS_S3_BUCKET", "byupathway-public")
+AWS_S3_PREFIX = get_config("AWS_S3_PREFIX", "topic-modeling-data")
 AWS_REGION = "us-east-1"
 
 # ============ File Naming Patterns ============

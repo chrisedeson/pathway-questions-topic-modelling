@@ -107,7 +107,8 @@ def main():
         with st.expander("💡 Geographic Insights"):
             if 'country' in df.columns:
                 unique_countries = df['country'].nunique()
-                top_country = df['country'].mode()[0] if not df['country'].empty else "N/A"
+                mode_result = df['country'].mode()
+                top_country = mode_result[0] if len(mode_result) > 0 else "N/A"
                 top_country_count = df['country'].value_counts().iloc[0] if not df['country'].empty else 0
                 top_country_pct = (top_country_count / len(df) * 100) if len(df) > 0 else 0
                 
@@ -140,13 +141,17 @@ def main():
                 
                 # Find peak hour
                 if not df_copy['hour'].isna().all():
-                    peak_hour = df_copy['hour'].mode()[0]
-                    peak_day = df_copy['day_of_week'].mode()[0]
+                    hour_mode = df_copy['hour'].mode()
+                    day_mode = df_copy['day_of_week'].mode()
                     
-                    st.markdown(f"""
-                    **Activity Patterns:**
-                    - Most questions are asked around **{peak_hour}:00**
-                    - Most active day: **{peak_day}**
+                    if len(hour_mode) > 0 and len(day_mode) > 0:
+                        peak_hour = hour_mode[0]
+                        peak_day = day_mode[0]
+                        
+                        st.markdown(f"""
+                        **Activity Patterns:**
+                        - Most questions are asked around **{peak_hour}:00**
+                        - Most active day: **{peak_day}**
                     - Use this information to optimize support staff scheduling
                     """)
     
@@ -165,15 +170,17 @@ def main():
             if 'matched_topic' in df.columns:
                 st.markdown("#### 📋 Topic Coverage")
                 existing_topics = df[df['classification'] == 'Existing Topic']
-                if not existing_topics.empty:
+                if not existing_topics.empty and 'matched_topic' in existing_topics.columns:
                     unique_topics = existing_topics['matched_topic'].nunique()
                     st.metric("Unique Topics Matched", unique_topics)
                     
                     # Most common topic
-                    top_topic = existing_topics['matched_topic'].mode()[0]
-                    top_topic_count = existing_topics['matched_topic'].value_counts().iloc[0]
-                    st.metric("Most Common Topic", top_topic)
-                    st.metric("Questions in Top Topic", top_topic_count)
+                    mode_result = existing_topics['matched_topic'].mode()
+                    if len(mode_result) > 0:
+                        top_topic = mode_result[0]
+                        top_topic_count = existing_topics['matched_topic'].value_counts().iloc[0]
+                        st.metric("Most Common Topic", top_topic)
+                        st.metric("Questions in Top Topic", top_topic_count)
         
         with col2:
             if 'new_topics' in st.session_state.get('raw_data', {}):

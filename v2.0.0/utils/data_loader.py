@@ -8,19 +8,28 @@ import boto3
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 import json
-from config import (
-    AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_BUCKET, 
-    AWS_S3_PREFIX, AWS_REGION, FILE_PATTERNS, CACHE_TTL
-)
+from io import BytesIO
+import os
 
 
-@st.cache_data(ttl=CACHE_TTL, show_spinner="Loading data from S3...")
+@st.cache_data(ttl=3600, show_spinner="Loading data from S3...")
 def load_data_from_s3() -> Dict[str, pd.DataFrame]:
     """
     Load all parquet files from S3.
     Returns a dictionary of DataFrames.
     """
+    # Import config values here (after Streamlit has initialized)
+    from config import (
+        AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_BUCKET, 
+        AWS_S3_PREFIX, AWS_REGION, FILE_PATTERNS
+    )
+    
     try:
+        # Debug: Check if credentials are loaded
+        if not AWS_ACCESS_KEY_ID or not AWS_SECRET_ACCESS_KEY:
+            st.error(f"❌ AWS credentials not loaded. Access Key: {'SET' if AWS_ACCESS_KEY_ID else 'EMPTY'}, Secret Key: {'SET' if AWS_SECRET_ACCESS_KEY else 'EMPTY'}")
+            return {}
+        
         s3_client = boto3.client(
             's3',
             aws_access_key_id=AWS_ACCESS_KEY_ID,
@@ -49,13 +58,20 @@ def load_data_from_s3() -> Dict[str, pd.DataFrame]:
             
             # Match files to patterns
             for pattern_key, pattern in FILE_PATTERNS.items():
-                pattern_prefix = pattern.replace('_*.', '_')
-                if filename.startswith(pattern_prefix):
-                    file_groups[pattern_key].append({
-                        'key': key,
-                        'last_modified': obj['LastModified'],
-                        'size': obj['Size']
-                    })
+                # Extract the base name and extension from pattern
+                # e.g., "similar_questions_*.parquet" -> base="similar_questions_", ext=".parquet"
+                parts = pattern.split('*')
+                if len(parts) == 2:
+                    prefix = parts[0]  # "similar_questions_"
+                    suffix = parts[1]  # ".parquet"
+                    
+                    # Check if filename matches pattern
+                    if filename.startswith(prefix) and filename.endswith(suffix):
+                        file_groups[pattern_key].append({
+                            'key': key,
+                            'last_modified': obj['LastModified'],
+                            'size': obj['Size']
+                        })
         
         # Load the most recent file for each type
         for file_type, files in file_groups.items():
@@ -72,8 +88,10 @@ def load_data_from_s3() -> Dict[str, pd.DataFrame]:
             
             try:
                 # Download and read parquet file
+                # Must read into BytesIO buffer because pandas needs seekable stream
                 obj = s3_client.get_object(Bucket=AWS_S3_BUCKET, Key=most_recent['key'])
-                df = pd.read_parquet(obj['Body'])
+                buffer = BytesIO(obj['Body'].read())
+                df = pd.read_parquet(buffer)
                 data[file_type] = df
                 
             except Exception as e:
@@ -86,11 +104,17 @@ def load_data_from_s3() -> Dict[str, pd.DataFrame]:
         return {}
 
 
-@st.cache_data(ttl=CACHE_TTL)
+@st.cache_data(ttl=3600)
 def get_latest_file_info() -> Dict[str, any]:
     """
     Get information about the latest files in S3.
     """
+    # Import config values here (after Streamlit has initialized)
+    from config import (
+        AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_BUCKET, 
+        AWS_S3_PREFIX, AWS_REGION
+    )
+    
     try:
         s3_client = boto3.client(
             's3',
@@ -128,15 +152,49 @@ def get_latest_file_info() -> Dict[str, any]:
 
 def merge_data_for_dashboard(data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
     """
-    Merge similar_questions and new_topics data for the main dashboard view.
-    Adds a 'classification' column to distinguish between existing and new topics.
+    Merge data for the main dashboard view.
+    Primary source is pathway_questions_review which has ALL questions.
     """
+    # Use pathway_questions_review as primary source (has all questions)
+    if 'pathway_questions_review' in data and not data['pathway_questions_review'].empty:
+        df = data['pathway_questions_review'].copy()
+        
+        # Rename classification values to match dashboard expectations
+        classification_map = {
+            'existing': 'Existing Topic',
+            'new': 'New Topic',
+            'uncategorized': 'Uncategorized'
+        }
+        df['classification'] = df['classification'].map(classification_map)
+        
+        # For consistency, rename topic_name to matched_topic for existing topics
+        df['matched_topic'] = df['topic_name']
+        
+        # Add similarity score from similar_questions if available
+        if 'similar_questions' in data:
+            similar_df = data['similar_questions'][['question', 'similarity_score']].copy()
+            df = df.merge(similar_df, on='question', how='left')
+        else:
+            # Use confidence as similarity for existing topics
+            df['similarity_score'] = df.apply(
+                lambda row: row['confidence'] if row['classification'] == 'Existing Topic' else None,
+                axis=1
+            )
+        
+        # Ensure timestamp is datetime if it exists
+        if 'timestamp' in df.columns:
+            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+        
+        return df
+    
+    # Fallback to old logic if pathway_questions_review doesn't exist
     dfs = []
     
     # Process similar questions (existing topics)
     if 'similar_questions' in data and not data['similar_questions'].empty:
         df_similar = data['similar_questions'].copy()
         df_similar['classification'] = 'Existing Topic'
+        df_similar['matched_topic'] = df_similar['existing_topic']
         dfs.append(df_similar)
     
     # Process new topics
@@ -146,8 +204,6 @@ def merge_data_for_dashboard(data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         # For new topics, matched_topic and matched_subtopic should be null
         if 'matched_topic' not in df_new.columns:
             df_new['matched_topic'] = None
-        if 'matched_subtopic' not in df_new.columns:
-            df_new['matched_subtopic'] = None
         dfs.append(df_new)
     
     if not dfs:
@@ -182,9 +238,16 @@ def calculate_kpis(merged_df: pd.DataFrame, data: Dict[str, pd.DataFrame]) -> Di
     }
     
     # Count unique new topics
+    # new_topics DataFrame has columns: topic_name, representative_question, question_count
+    # Each row represents one topic cluster
     if 'new_topics' in data and not data['new_topics'].empty:
-        if 'cluster_id' in data['new_topics'].columns:
-            kpis['new_topics_discovered'] = data['new_topics']['cluster_id'].nunique()
+        kpis['new_topics_discovered'] = len(data['new_topics'])
+    
+    # Alternative: Count unique topic names in merged_df for new topics
+    if kpis['new_topics_discovered'] == 0:
+        new_topic_df = merged_df[merged_df['classification'] == 'New Topic']
+        if 'matched_topic' in new_topic_df.columns:
+            kpis['new_topics_discovered'] = new_topic_df['matched_topic'].nunique()
     
     # Get last updated timestamp
     file_info = get_latest_file_info()
@@ -215,9 +278,15 @@ def filter_dataframe(
     # Date range filter
     if date_range and 'timestamp' in filtered_df.columns:
         start_date, end_date = date_range
+        # Convert to timezone-aware timestamps if the column is timezone-aware
+        start_ts = pd.Timestamp(start_date)
+        end_ts = pd.Timestamp(end_date)
+        if filtered_df['timestamp'].dtype.tz is not None:
+            start_ts = start_ts.tz_localize('UTC')
+            end_ts = end_ts.tz_localize('UTC')
         filtered_df = filtered_df[
-            (filtered_df['timestamp'] >= pd.Timestamp(start_date)) &
-            (filtered_df['timestamp'] <= pd.Timestamp(end_date))
+            (filtered_df['timestamp'] >= start_ts) &
+            (filtered_df['timestamp'] <= end_ts)
         ]
     
     # Country filter

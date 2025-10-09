@@ -13,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from config import PAGE_CONFIG, CUSTOM_CSS
-from utils.data_loader import load_data_from_s3, merge_data_for_dashboard, calculate_kpis
+from utils.data_loader import load_data_from_s3, merge_data_for_dashboard, calculate_kpis, get_latest_file_info
 
 
 def configure_page():
@@ -37,6 +37,10 @@ def main():
             "https://byu-pathway.brightspotcdn.com/42/2e/4d4c7b10498c84233ae51179437c/byu-pw-icon-gold-rgb-1-1.svg",
             width=100
         )
+        # Add refresh button
+        if st.button("🔄 Refresh Data", help="Clear cache and reload data from S3"):
+            st.cache_data.clear()
+            st.rerun()
     
     st.markdown("---")
     
@@ -71,7 +75,12 @@ def main():
         st.session_state['kpis'] = kpis
     
     # Success message
-    st.success(f"✅ **Data loaded successfully!** Processing {kpis['total_questions']:,} questions from S3.")
+    file_info = get_latest_file_info()
+    if file_info and 'timestamp' in file_info:
+        st.success(f"✅ **Data loaded successfully!** Processing {kpis['total_questions']:,} questions from S3.")
+        st.caption(f"📅 Data timestamp: {file_info['timestamp']}")
+    else:
+        st.success(f"✅ **Data loaded successfully!** Processing {kpis['total_questions']:,} questions from S3.")
     
     # Quick overview
     st.markdown("### 📋 Quick Overview")
