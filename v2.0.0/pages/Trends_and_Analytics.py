@@ -8,6 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from utils.data_loader import ensure_data_loaded
 from utils.visualizations import (
     create_kpi_cards, plot_classification_distribution, plot_country_distribution,
     plot_timeline, plot_similarity_distribution, plot_top_topics,
@@ -20,16 +21,14 @@ def main():
     st.markdown("*Deep dive into patterns, trends, and insights from student questions*")
     st.markdown("---")
     
-    # Check if data is loaded
-    if 'merged_df' not in st.session_state or 'kpis' not in st.session_state:
-        st.error("❌ No data loaded. Please return to the home page.")
-        st.stop()
+    # Ensure data is loaded (handles page refresh)
+    ensure_data_loaded()
     
     df = st.session_state['merged_df']
     kpis = st.session_state['kpis']
     
     # KPI Cards
-    st.markdown("## 📊 Key Performance Indicators")
+    st.markdown("## Key Performance Indicators")
     create_kpi_cards(kpis)
     
     st.markdown("---")

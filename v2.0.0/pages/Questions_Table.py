@@ -11,7 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import CLASSIFICATION_OPTIONS
-from utils.data_loader import filter_dataframe, export_to_csv
+from utils.data_loader import filter_dataframe, ensure_data_loaded
 
 
 def main():
@@ -19,35 +19,44 @@ def main():
     st.markdown("*Interactive table with advanced filtering*")
     st.markdown("---")
     
-    # Check if data is loaded
-    if 'merged_df' not in st.session_state:
-        st.error("❌ No data loaded. Please return to the home page.")
-        st.stop()
+    # Ensure data is loaded (handles page refresh)
+    ensure_data_loaded()
     
     df = st.session_state['merged_df'].copy()
     
-    # Sidebar filters
-    st.sidebar.header("🔍 Filters")
+    # Filters in main page area
+    st.markdown("## 🔍 Filters")
     
-    # Classification filter
-    classification = st.sidebar.selectbox(
-        "Classification",
-        CLASSIFICATION_OPTIONS,
-        help="Filter by question classification"
-    )
+    # First row: Classification and Search
+    col1, col2 = st.columns(2)
     
-    # Date range filter
-    st.sidebar.subheader("📅 Date Range")
+    with col1:
+        classification = st.selectbox(
+            "Classification",
+            CLASSIFICATION_OPTIONS,
+            help="Filter by question classification"
+        )
+    
+    with col2:
+        search_query = st.text_input(
+            "🔎 Search in questions",
+            placeholder="Enter keywords...",
+            help="Search for specific text in questions"
+        )
+    
+    # Second row: Date Range
     if 'timestamp' in df.columns:
         min_date = df['timestamp'].min().date() if not df['timestamp'].isna().all() else datetime.now().date()
         max_date = df['timestamp'].max().date() if not df['timestamp'].isna().all() else datetime.now().date()
         
-        date_range = st.sidebar.date_input(
+        st.markdown("#### 📅 Date Range")
+        date_range = st.date_input(
             "Select date range",
             value=(min_date, max_date),
             min_value=min_date,
             max_value=max_date,
-            help="Filter questions by date range"
+            help="Filter questions by date range",
+            label_visibility="collapsed"
         )
         
         if len(date_range) == 2:
@@ -56,44 +65,41 @@ def main():
             date_filter = None
     else:
         date_filter = None
-        st.sidebar.info("No timestamp data available")
+        st.info("No timestamp data available")
     
-    # Country filter
-    if 'country' in df.columns:
-        countries = sorted(df['country'].dropna().unique().tolist())
-        selected_countries = st.sidebar.multiselect(
-            "🌍 Countries",
-            countries,
-            help="Filter by country (leave empty for all)"
-        )
-        country_filter = selected_countries if selected_countries else None
-    else:
-        country_filter = None
+    # Third row: Country and Similarity filters
+    col1, col2 = st.columns(2)
     
-    # Similarity filter
-    if 'similarity_score' in df.columns:
-        min_similarity = st.sidebar.slider(
-            "📊 Minimum Similarity Score",
-            min_value=0.0,
-            max_value=1.0,
-            value=0.0,
-            step=0.05,
-            help="Filter by minimum similarity score (for existing topics)"
-        )
-    else:
-        min_similarity = None
+    with col1:
+        if 'country' in df.columns:
+            countries = sorted(df['country'].dropna().unique().tolist())
+            selected_countries = st.multiselect(
+                "🌍 Countries",
+                countries,
+                help="Filter by country (leave empty for all)"
+            )
+            country_filter = selected_countries if selected_countries else None
+        else:
+            country_filter = None
     
-    # Search box
-    st.sidebar.subheader("🔎 Search")
-    search_query = st.sidebar.text_input(
-        "Search in questions",
-        placeholder="Enter keywords...",
-        help="Search for specific text in questions"
-    )
+    with col2:
+        if 'similarity_score' in df.columns:
+            min_similarity = st.slider(
+                "📊 Minimum Similarity Score",
+                min_value=0.0,
+                max_value=1.0,
+                value=0.0,
+                step=0.05,
+                help="Filter by minimum similarity score (for existing topics)"
+            )
+        else:
+            min_similarity = None
     
     # Clear filters button
-    if st.sidebar.button("🔄 Clear All Filters"):
+    if st.button("🔄 Clear All Filters", use_container_width=False):
         st.rerun()
+    
+    st.markdown("---")
     
     # Apply filters
     filtered_df = filter_dataframe(
@@ -105,35 +111,8 @@ def main():
         min_similarity=min_similarity
     )
     
-    # Main content
+    # Results count
     st.markdown(f"### 📊 Showing {len(filtered_df):,} of {len(df):,} questions")
-    
-    # Export options
-    st.markdown("####  Export Data")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        csv_data = export_to_csv(filtered_df)
-        st.download_button(
-            label="📄 Download Filtered Data (CSV)",
-            data=csv_data,
-            file_name=f"pathway_questions_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-            mime="text/csv",
-            help="Download the currently filtered data"
-        )
-    
-    with col2:
-        csv_all = export_to_csv(df)
-        st.download_button(
-            label="📄 Download All Data (CSV)",
-            data=csv_all,
-            file_name=f"pathway_questions_all_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-            mime="text/csv",
-            help="Download all questions (ignoring filters)"
-        )
-    
-    st.markdown("---")
     
     # Display table with Streamlit's native interactive dataframe
     if not filtered_df.empty:
@@ -177,7 +156,6 @@ def main():
     - **Search** for specific keywords in questions
     - **Sort** columns by clicking on the column headers
     - **Resize** columns by dragging the column borders
-    - **Export** your filtered results to CSV for external analysis
     - All operations happen **instantly** without page refresh!
     """)
 

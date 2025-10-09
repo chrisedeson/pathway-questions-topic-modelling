@@ -1,5 +1,5 @@
 """
-Configuration settings for BYU Pathway Topic Analysis Dashboard v2.0.0
+Configuration settings for BYU Pathway Missionary Question Analysis Dashboard v2.0.0
 """
 
 import os

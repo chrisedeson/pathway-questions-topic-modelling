@@ -10,7 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import COLUMN_DISPLAY_NAMES
-from utils.data_loader import export_to_csv
+from utils.data_loader import export_to_csv, ensure_data_loaded
 
 
 def main():
@@ -18,10 +18,8 @@ def main():
     st.markdown("*Explore newly discovered topics identified through clustering analysis*")
     st.markdown("---")
     
-    # Check if data is loaded
-    if 'raw_data' not in st.session_state or 'merged_df' not in st.session_state:
-        st.error("❌ No data loaded. Please return to the home page.")
-        st.stop()
+    # Ensure data is loaded (handles page refresh)
+    ensure_data_loaded()
     
     raw_data = st.session_state['raw_data']
     merged_df = st.session_state['merged_df']

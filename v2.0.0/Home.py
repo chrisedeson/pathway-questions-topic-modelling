@@ -1,5 +1,5 @@
 """
-BYU Pathway Missionary Question Analysis Dashboard v2.0.0
+BYU Pathway Topic Analysis Dashboard v2.0.0
 Main Streamlit Application
 
 A professional, scalable dashboard for analyzing student questions and topics.
@@ -30,7 +30,7 @@ def main():
     col1, col2 = st.columns([3, 1])
     with col1:
         st.title("BYU Pathway Missionary Question Analysis Dashboard")
-        st.markdown("*Professional insights into student questions and topic discovery*")
+        st.markdown("*Insights into missionary questions and topic discovery*")
     
     with col2:
         st.image(

@@ -363,3 +363,36 @@ def get_column_config(columns: List[str]) -> Dict[str, any]:
                 )
     
     return config
+
+
+def ensure_data_loaded():
+    """
+    Ensure data is loaded into session state.
+    Call this at the start of every page to handle page refreshes.
+    """
+    if 'merged_df' not in st.session_state or 'raw_data' not in st.session_state or 'kpis' not in st.session_state:
+        with st.spinner("🔄 Loading data from AWS S3..."):
+            data = load_data_from_s3()
+        
+        if not data:
+            st.error("❌ **No data available.** Please ensure the notebook has uploaded files to S3.")
+            st.info("""
+            **💡 Tip:** Run the Jupyter notebook to process questions and upload results to S3.
+            The dashboard will automatically load the most recent data.
+            """)
+            st.stop()
+        
+        # Merge data for dashboard
+        merged_df = merge_data_for_dashboard(data)
+        
+        if merged_df.empty:
+            st.warning("⚠️ No question data available in the loaded files.")
+            st.stop()
+        
+        # Calculate KPIs
+        kpis = calculate_kpis(merged_df, data)
+        
+        # Store in session state
+        st.session_state['merged_df'] = merged_df
+        st.session_state['raw_data'] = data
+        st.session_state['kpis'] = kpis
