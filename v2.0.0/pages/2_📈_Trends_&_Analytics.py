@@ -123,7 +123,7 @@ def main():
         st.markdown("### ⏰ Temporal Patterns")
         
         # Timeline
-        plot_timeline(df)
+        plot_timeline(df, key="timeline_temporal_tab")
         
         st.markdown("---")
         

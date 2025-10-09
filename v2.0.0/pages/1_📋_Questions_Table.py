@@ -1,5 +1,5 @@
 """
-Questions Table Page - Interactive data table with filters and column selection
+Questions Table Page - Interactive data table with filters
 """
 
 import streamlit as st
@@ -10,16 +10,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config import (
-    DEFAULT_VISIBLE_COLUMNS, ALL_AVAILABLE_COLUMNS, 
-    COLUMN_DISPLAY_NAMES, CLASSIFICATION_OPTIONS, SORT_OPTIONS
-)
-from utils.data_loader import filter_dataframe, sort_dataframe, get_column_config, export_to_csv
+from config import CLASSIFICATION_OPTIONS
+from utils.data_loader import filter_dataframe, export_to_csv
 
 
 def main():
     st.title("📋 Questions Table")
-    st.markdown("*Interactive table with advanced filtering and column customization*")
+    st.markdown("*Interactive table with advanced filtering*")
     st.markdown("---")
     
     # Check if data is loaded
@@ -111,80 +108,37 @@ def main():
     # Main content
     st.markdown(f"### 📊 Showing {len(filtered_df):,} of {len(df):,} questions")
     
-    # Column selection and sorting in tabs
-    tab1, tab2 = st.tabs(["🎛️ Display Options", "📥 Export"])
+    # Export options
+    st.markdown("####  Export Data")
     
-    with tab1:
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("#### 📋 Column Selection")
-            
-            # Get available columns that exist in the dataframe
-            available_cols = [col for col in ALL_AVAILABLE_COLUMNS if col in filtered_df.columns]
-            default_cols = [col for col in DEFAULT_VISIBLE_COLUMNS if col in filtered_df.columns]
-            
-            selected_columns = st.multiselect(
-                "Select columns to display",
-                available_cols,
-                default=default_cols,
-                format_func=lambda x: COLUMN_DISPLAY_NAMES.get(x, x),
-                help="Choose which columns to show in the table"
-            )
-            
-            if not selected_columns:
-                st.warning("⚠️ Please select at least one column to display")
-                selected_columns = default_cols
-        
-        with col2:
-            st.markdown("#### 🔄 Sorting")
-            
-            sort_option = st.selectbox(
-                "Sort by",
-                list(SORT_OPTIONS.keys()),
-                help="Sort the table by different criteria"
-            )
-            
-            sort_column, sort_ascending = SORT_OPTIONS[sort_option]
-            
-            if sort_column in filtered_df.columns:
-                filtered_df = sort_dataframe(filtered_df, sort_column, sort_ascending)
+    col1, col2 = st.columns(2)
     
-    with tab2:
-        st.markdown("#### 📥 Export Data")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            csv_data = export_to_csv(filtered_df[selected_columns])
-            st.download_button(
-                label="📄 Download Filtered Data (CSV)",
-                data=csv_data,
-                file_name=f"pathway_questions_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv",
-                help="Download the currently filtered data"
-            )
-        
-        with col2:
-            csv_all = export_to_csv(df[selected_columns])
-            st.download_button(
-                label="📄 Download All Data (CSV)",
-                data=csv_all,
-                file_name=f"pathway_questions_all_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv",
-                help="Download all questions (ignoring filters)"
-            )
+    with col1:
+        csv_data = export_to_csv(filtered_df)
+        st.download_button(
+            label="📄 Download Filtered Data (CSV)",
+            data=csv_data,
+            file_name=f"pathway_questions_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            mime="text/csv",
+            help="Download the currently filtered data"
+        )
+    
+    with col2:
+        csv_all = export_to_csv(df)
+        st.download_button(
+            label="📄 Download All Data (CSV)",
+            data=csv_all,
+            file_name=f"pathway_questions_all_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            mime="text/csv",
+            help="Download all questions (ignoring filters)"
+        )
     
     st.markdown("---")
     
-    # Display table
-    if not filtered_df.empty and selected_columns:
-        # Get column configuration
-        column_config = get_column_config(selected_columns)
-        
+    # Display table with Streamlit's native interactive dataframe
+    if not filtered_df.empty:
         st.dataframe(
-            filtered_df[selected_columns],
-            column_config=column_config,
+            filtered_df,
             use_container_width=True,
             height=600,
             hide_index=True
@@ -208,7 +162,7 @@ def main():
             
             with col4:
                 if 'classification' in filtered_df.columns:
-                    new_topic_pct = (filtered_df['classification'] == 'New Topic').sum() / len(filtered_df) * 100
+                    new_topic_pct = (filtered_df['classification'] == 'new').sum() / len(filtered_df) * 100
                     st.metric("New Topics %", f"{new_topic_pct:.1f}%")
     
     else:
@@ -221,8 +175,8 @@ def main():
     
     - **Filter** questions by classification, date, country, or similarity score
     - **Search** for specific keywords in questions
-    - **Customize columns** to show only the information you need
-    - **Sort** by different criteria for better insights
+    - **Sort** columns by clicking on the column headers
+    - **Resize** columns by dragging the column borders
     - **Export** your filtered results to CSV for external analysis
     - All operations happen **instantly** without page refresh!
     """)

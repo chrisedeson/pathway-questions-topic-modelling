@@ -94,7 +94,7 @@ def plot_classification_distribution(df: pd.DataFrame):
         legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5)
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, key="classification_distribution_pie")
 
 
 def plot_country_distribution(df: pd.DataFrame, top_n: int = 10):
@@ -125,12 +125,16 @@ def plot_country_distribution(df: pd.DataFrame, top_n: int = 10):
         yaxis=dict(autorange="reversed")
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, key="country_distribution_bar")
 
 
-def plot_timeline(df: pd.DataFrame):
+def plot_timeline(df: pd.DataFrame, key: str = "timeline_line_chart"):
     """
     Line chart showing questions over time.
+    
+    Args:
+        df: DataFrame with timestamp and classification columns
+        key: Unique key for the plotly chart (required if used multiple times)
     """
     if 'timestamp' not in df.columns or df.empty:
         st.info("No timestamp data available")
@@ -170,7 +174,7 @@ def plot_timeline(df: pd.DataFrame):
         )
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, key=key)
 
 
 def plot_similarity_distribution(df: pd.DataFrame):
@@ -203,7 +207,7 @@ def plot_similarity_distribution(df: pd.DataFrame):
         showlegend=False
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, key="similarity_distribution_histogram")
 
 
 def plot_top_topics(df: pd.DataFrame, top_n: int = 10):
@@ -241,7 +245,7 @@ def plot_top_topics(df: pd.DataFrame, top_n: int = 10):
         yaxis=dict(autorange="reversed")
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, key="top_topics_bar")
 
 
 def plot_hourly_heatmap(df: pd.DataFrame):
@@ -279,7 +283,7 @@ def plot_hourly_heatmap(df: pd.DataFrame):
         height=400
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, key="hourly_heatmap")
 
 
 def plot_language_distribution(df: pd.DataFrame):
@@ -308,4 +312,4 @@ def plot_language_distribution(df: pd.DataFrame):
         legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5)
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, key="language_distribution_pie")

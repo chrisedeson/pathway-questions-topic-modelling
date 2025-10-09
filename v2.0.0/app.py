@@ -29,7 +29,7 @@ def main():
     # Header
     col1, col2 = st.columns([3, 1])
     with col1:
-        st.title("📊 BYU Pathway Topic Analysis Dashboard")
+        st.title("BYU Pathway Topic Analysis Dashboard")
         st.markdown("*Professional insights into student questions and topic discovery*")
     
     with col2:
@@ -37,10 +37,6 @@ def main():
             "https://byu-pathway.brightspotcdn.com/42/2e/4d4c7b10498c84233ae51179437c/byu-pw-icon-gold-rgb-1-1.svg",
             width=100
         )
-        # Add refresh button
-        if st.button("🔄 Refresh Data", help="Clear cache and reload data from S3"):
-            st.cache_data.clear()
-            st.rerun()
     
     st.markdown("---")
     
@@ -104,6 +100,12 @@ def main():
     
     💡 **Tip:** All filters and sorting happen instantly without page refresh!
     """)
+    
+    # Sidebar - Refresh button at the bottom
+    st.sidebar.markdown("---")
+    if st.sidebar.button("🔄 Refresh Data", help="Clear cache and reload data from S3", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
     
     # Footer
     st.markdown("---")
