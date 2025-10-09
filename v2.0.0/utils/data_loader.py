@@ -82,8 +82,14 @@ def load_data_from_s3() -> Dict[str, pd.DataFrame]:
             files.sort(key=lambda x: x['last_modified'], reverse=True)
             most_recent = files[0]
             
-            # Skip error_log JSON files for now
+            # Load error_log JSON files separately (don't skip them)
             if file_type == "error_log":
+                try:
+                    obj = s3_client.get_object(Bucket=AWS_S3_BUCKET, Key=most_recent['key'])
+                    error_data = json.loads(obj['Body'].read().decode('utf-8'))
+                    data[file_type] = error_data  # Store as dict/list, not DataFrame
+                except Exception as e:
+                    st.error(f"Error loading {file_type}: {str(e)}")
                 continue
             
             try:
@@ -173,6 +179,8 @@ def merge_data_for_dashboard(data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         # Add similarity score from similar_questions if available
         if 'similar_questions' in data:
             similar_df = data['similar_questions'][['question', 'similarity_score']].copy()
+            # Keep only the highest similarity score for each question (in case of duplicates)
+            similar_df = similar_df.sort_values('similarity_score', ascending=False).drop_duplicates('question', keep='first')
             df = df.merge(similar_df, on='question', how='left')
         else:
             # Use confidence as similarity for existing topics
@@ -184,6 +192,15 @@ def merge_data_for_dashboard(data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         # Ensure timestamp is datetime if it exists
         if 'timestamp' in df.columns:
             df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+        
+        # Final deduplication check - remove any duplicates that may have been introduced by merging
+        # Use same logic as notebook: same timestamp AND same question
+        if 'timestamp' in df.columns and 'question' in df.columns:
+            before_dedup = len(df)
+            df = df.drop_duplicates(subset=['timestamp', 'question'], keep='first')
+            after_dedup = len(df)
+            if before_dedup > after_dedup:
+                print(f"⚠️ Removed {before_dedup - after_dedup} duplicate rows during dashboard merge")
         
         return df
     
@@ -296,10 +313,13 @@ def filter_dataframe(
         filtered_df = filtered_df[filtered_df['country'].isin(countries)]
     
     # Search filter (searches in question text)
-    if search_query and 'input' in filtered_df.columns:
-        filtered_df = filtered_df[
-            filtered_df['input'].str.contains(search_query, case=False, na=False)
-        ]
+    if search_query:
+        # Try 'question' column first (used in merged data), fallback to 'input'
+        search_column = 'question' if 'question' in filtered_df.columns else 'input'
+        if search_column in filtered_df.columns:
+            filtered_df = filtered_df[
+                filtered_df[search_column].str.contains(search_query, case=False, na=False)
+            ]
     
     # Similarity filter (only apply if min_similarity > 0 to avoid filtering out NaN values)
     if min_similarity is not None and min_similarity > 0.0 and 'similarity_score' in filtered_df.columns:
@@ -415,10 +435,19 @@ def generate_error_report(merged_df: pd.DataFrame, raw_data: Dict[str, pd.DataFr
     # Data Loading Summary
     report.write("DATA LOADING SUMMARY\n")
     report.write("-" * 80 + "\n")
-    for file_type, df in raw_data.items():
-        report.write(f"{file_type}: {len(df)} rows, {len(df.columns)} columns\n")
-        report.write(f"  Columns: {', '.join(df.columns.tolist())}\n")
-        report.write(f"  Memory: {df.memory_usage(deep=True).sum() / 1024**2:.2f} MB\n\n")
+    for file_type, data_item in raw_data.items():
+        if isinstance(data_item, pd.DataFrame):
+            report.write(f"{file_type}: {len(data_item)} rows, {len(data_item.columns)} columns\n")
+            report.write(f"  Columns: {', '.join(data_item.columns.tolist())}\n")
+            report.write(f"  Memory: {data_item.memory_usage(deep=True).sum() / 1024**2:.2f} MB\n\n")
+        elif file_type == "error_log":
+            report.write(f"{file_type}: Loaded as JSON/dict\n")
+            if isinstance(data_item, dict):
+                report.write(f"  Keys: {', '.join(data_item.keys())}\n\n")
+            elif isinstance(data_item, list):
+                report.write(f"  Total errors: {len(data_item)}\n\n")
+            else:
+                report.write(f"  Type: {type(data_item)}\n\n")
     
     # Merged Data Summary
     report.write("\nMERGED DATA SUMMARY\n")
@@ -440,10 +469,22 @@ def generate_error_report(merged_df: pd.DataFrame, raw_data: Dict[str, pd.DataFr
     report.write("\nDATA QUALITY ISSUES\n")
     report.write("-" * 80 + "\n")
     
-    # Check for duplicate questions
-    if 'question' in merged_df.columns:
+    # Check for duplicate questions (timestamp AND question must both be the same)
+    if 'question' in merged_df.columns and 'timestamp' in merged_df.columns:
+        # True duplicates: same timestamp AND same question text
+        duplicates = merged_df.duplicated(subset=['timestamp', 'question'], keep='first').sum()
+        report.write(f"True duplicate questions (same timestamp AND question): {duplicates}\n")
+        report.write(f"  NOTE: These should have been removed by the notebook cleaning process.\n")
+        report.write(f"  If this number is > 0, it may indicate duplicates in similar_questions causing merge issues.\n\n")
+        
+        # Also report questions with same text but different timestamps (not true duplicates)
+        question_only_duplicates = merged_df['question'].duplicated(keep='first').sum()
+        report.write(f"Questions with same text (but may have different timestamps): {question_only_duplicates}\n")
+        report.write(f"  NOTE: These are NOT duplicates by our definition (different timestamps = different submissions).\n")
+    elif 'question' in merged_df.columns:
         duplicates = merged_df['question'].duplicated().sum()
-        report.write(f"Duplicate questions: {duplicates}\n")
+        report.write(f"Duplicate questions (by text only): {duplicates}\n")
+        report.write(f"  WARNING: Cannot check timestamp - timestamp column missing!\n")
     
     # Check for null classifications
     if 'classification' in merged_df.columns:
@@ -500,6 +541,53 @@ def generate_error_report(merged_df: pd.DataFrame, raw_data: Dict[str, pd.DataFr
         for country, count in country_counts.items():
             pct = round(count / len(merged_df) * 100, 2)
             report.write(f"{country}: {count} ({pct}%)\n")
+    
+    # Error Log Analysis
+    if 'error_log' in raw_data:
+        report.write("\nERROR LOG ANALYSIS\n")
+        report.write("=" * 80 + "\n")
+        error_data = raw_data['error_log']
+        
+        if isinstance(error_data, dict):
+            # If it's a dict, iterate through keys
+            for key, value in error_data.items():
+                report.write(f"\n{key}:\n")
+                report.write("-" * 80 + "\n")
+                if isinstance(value, list):
+                    report.write(f"Total errors: {len(value)}\n")
+                    # Show first few errors as examples
+                    for i, error in enumerate(value[:5]):
+                        report.write(f"\nError {i+1}:\n")
+                        if isinstance(error, dict):
+                            for k, v in error.items():
+                                report.write(f"  {k}: {v}\n")
+                        else:
+                            report.write(f"  {error}\n")
+                    if len(value) > 5:
+                        report.write(f"\n... and {len(value) - 5} more errors\n")
+                else:
+                    report.write(f"{value}\n")
+        elif isinstance(error_data, list):
+            # If it's a list of errors
+            report.write(f"Total errors logged: {len(error_data)}\n\n")
+            report.write("Sample Errors (first 10):\n")
+            report.write("-" * 80 + "\n")
+            for i, error in enumerate(error_data[:10]):
+                report.write(f"\nError {i+1}:\n")
+                if isinstance(error, dict):
+                    for key, value in error.items():
+                        report.write(f"  {key}: {value}\n")
+                else:
+                    report.write(f"  {error}\n")
+            if len(error_data) > 10:
+                report.write(f"\n... and {len(error_data) - 10} more errors\n")
+        else:
+            report.write(f"Error data type: {type(error_data)}\n")
+            report.write(f"Content: {str(error_data)[:500]}\n")
+    else:
+        report.write("\nERROR LOG ANALYSIS\n")
+        report.write("=" * 80 + "\n")
+        report.write("No error log data available in S3.\n")
     
     report.write("\n" + "=" * 80 + "\n")
     report.write("END OF REPORT\n")

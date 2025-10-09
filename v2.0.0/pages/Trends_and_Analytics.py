@@ -8,12 +8,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from config import PAGE_CONFIG
 from utils.data_loader import ensure_data_loaded
 from utils.visualizations import (
     create_kpi_cards, plot_classification_distribution, plot_country_distribution,
     plot_timeline, plot_similarity_distribution, plot_top_topics,
     plot_hourly_heatmap, plot_language_distribution
 )
+
+# Configure page settings (needed for direct page access)
+st.set_page_config(**PAGE_CONFIG)
 
 
 def main():

@@ -9,8 +9,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config import COLUMN_DISPLAY_NAMES
+from config import COLUMN_DISPLAY_NAMES, PAGE_CONFIG
 from utils.data_loader import ensure_data_loaded
+
+# Configure page settings (needed for direct page access)
+st.set_page_config(**PAGE_CONFIG)
 
 
 def main():
