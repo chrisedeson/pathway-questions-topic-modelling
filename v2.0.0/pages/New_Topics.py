@@ -179,7 +179,7 @@ def main():
     
     with st.expander("💡 Insights & Recommendations"):
         st.markdown(f"""
-        ### 🔍 Analysis Summary
+        ### Analysis Summary
         
         **Discovery Statistics:**
         - Identified **{unique_topics}** new potential topics

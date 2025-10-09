@@ -8,6 +8,7 @@ A professional, scalable dashboard for analyzing student questions and topics.
 import streamlit as st
 import sys
 from pathlib import Path
+from datetime import datetime
 
 # Add utils to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -108,6 +109,28 @@ def main():
         st.rerun()
     
     # Footer
+    st.markdown("---")
+    
+    # Developer section - Error Report Download
+    st.markdown("*For developers only*")
+    if st.button("📥 Download Error Report", help="Generate and download diagnostic report"):
+        from utils.data_loader import generate_error_report
+        
+        # Generate the error report
+        error_report = generate_error_report(
+            st.session_state.get('merged_df', merged_df),
+            st.session_state.get('raw_data', data)
+        )
+        
+        # Create download button
+        st.download_button(
+            label="💾 Save Error Report",
+            data=error_report,
+            file_name=f"error_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+            mime="text/plain",
+            help="Download detailed diagnostic information"
+        )
+    
     st.markdown("---")
     st.markdown("""
     <div style='text-align: center; color: #666; padding: 20px;'>

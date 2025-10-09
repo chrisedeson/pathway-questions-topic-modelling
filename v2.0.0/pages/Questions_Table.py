@@ -60,7 +60,7 @@ def main():
             date_filter = None
     
     # Second row: Search
-    st.markdown("#### 🔎 Search in Questions")
+    st.markdown("#### Search in Questions")
     search_query = st.text_input(
         "Search in questions",
         placeholder="Enter keywords...",
@@ -149,7 +149,7 @@ def main():
             
             with col4:
                 if 'classification' in filtered_df.columns:
-                    new_topic_pct = (filtered_df['classification'] == 'new').sum() / len(filtered_df) * 100
+                    new_topic_pct = (filtered_df['classification'] == 'New Topic').sum() / len(filtered_df) * 100
                     st.metric("New Topics %", f"{new_topic_pct:.1f}%")
     
     else:

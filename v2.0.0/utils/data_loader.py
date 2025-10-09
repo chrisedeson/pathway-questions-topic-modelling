@@ -398,3 +398,110 @@ def ensure_data_loaded():
         st.session_state['merged_df'] = merged_df
         st.session_state['raw_data'] = data
         st.session_state['kpis'] = kpis
+
+
+def generate_error_report(merged_df: pd.DataFrame, raw_data: Dict[str, pd.DataFrame]) -> str:
+    """
+    Generate a detailed error/diagnostic report for developers.
+    Returns CSV-formatted string.
+    """
+    import io
+    
+    report = io.StringIO()
+    report.write("BYU PATHWAY TOPIC ANALYSIS - ERROR/DIAGNOSTIC REPORT\n")
+    report.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+    report.write("=" * 80 + "\n\n")
+    
+    # Data Loading Summary
+    report.write("DATA LOADING SUMMARY\n")
+    report.write("-" * 80 + "\n")
+    for file_type, df in raw_data.items():
+        report.write(f"{file_type}: {len(df)} rows, {len(df.columns)} columns\n")
+        report.write(f"  Columns: {', '.join(df.columns.tolist())}\n")
+        report.write(f"  Memory: {df.memory_usage(deep=True).sum() / 1024**2:.2f} MB\n\n")
+    
+    # Merged Data Summary
+    report.write("\nMERGED DATA SUMMARY\n")
+    report.write("-" * 80 + "\n")
+    report.write(f"Total rows: {len(merged_df)}\n")
+    report.write(f"Total columns: {len(merged_df.columns)}\n")
+    report.write(f"Columns: {', '.join(merged_df.columns.tolist())}\n\n")
+    
+    # Missing Data Analysis
+    report.write("\nMISSING DATA ANALYSIS\n")
+    report.write("-" * 80 + "\n")
+    missing_data = merged_df.isnull().sum()
+    missing_pct = (missing_data / len(merged_df) * 100).round(2)
+    for col in merged_df.columns:
+        if missing_data[col] > 0:
+            report.write(f"{col}: {missing_data[col]} ({missing_pct[col]}%)\n")
+    
+    # Data Quality Issues
+    report.write("\nDATA QUALITY ISSUES\n")
+    report.write("-" * 80 + "\n")
+    
+    # Check for duplicate questions
+    if 'question' in merged_df.columns:
+        duplicates = merged_df['question'].duplicated().sum()
+        report.write(f"Duplicate questions: {duplicates}\n")
+    
+    # Check for null classifications
+    if 'classification' in merged_df.columns:
+        null_classifications = merged_df['classification'].isnull().sum()
+        report.write(f"Null classifications: {null_classifications}\n")
+    
+    # Check for suspicious records
+    if 'is_suspicious' in merged_df.columns:
+        suspicious_count = merged_df['is_suspicious'].sum() if merged_df['is_suspicious'].dtype == 'bool' else 0
+        report.write(f"Suspicious records: {suspicious_count}\n")
+    
+    # Classification Distribution
+    if 'classification' in merged_df.columns:
+        report.write("\nCLASSIFICATION DISTRIBUTION\n")
+        report.write("-" * 80 + "\n")
+        class_counts = merged_df['classification'].value_counts()
+        for classification, count in class_counts.items():
+            pct = round(count / len(merged_df) * 100, 2)
+            report.write(f"{classification}: {count} ({pct}%)\n")
+    
+    # Similarity Score Stats
+    if 'similarity_score' in merged_df.columns:
+        report.write("\nSIMILARITY SCORE STATISTICS\n")
+        report.write("-" * 80 + "\n")
+        sim_scores = merged_df['similarity_score'].dropna()
+        if len(sim_scores) > 0:
+            report.write(f"Count: {len(sim_scores)}\n")
+            report.write(f"Mean: {sim_scores.mean():.4f}\n")
+            report.write(f"Median: {sim_scores.median():.4f}\n")
+            report.write(f"Min: {sim_scores.min():.4f}\n")
+            report.write(f"Max: {sim_scores.max():.4f}\n")
+            report.write(f"Std Dev: {sim_scores.std():.4f}\n")
+        else:
+            report.write("No similarity scores available\n")
+    
+    # Timestamp Analysis
+    if 'timestamp' in merged_df.columns:
+        report.write("\nTIMESTAMP ANALYSIS\n")
+        report.write("-" * 80 + "\n")
+        timestamps = pd.to_datetime(merged_df['timestamp'], errors='coerce')
+        valid_timestamps = timestamps.dropna()
+        if len(valid_timestamps) > 0:
+            report.write(f"Valid timestamps: {len(valid_timestamps)}\n")
+            report.write(f"Invalid timestamps: {len(timestamps) - len(valid_timestamps)}\n")
+            report.write(f"Date range: {valid_timestamps.min()} to {valid_timestamps.max()}\n")
+        else:
+            report.write("No valid timestamps\n")
+    
+    # Geographic Distribution
+    if 'country' in merged_df.columns:
+        report.write("\nGEOGRAPHIC DISTRIBUTION (Top 20)\n")
+        report.write("-" * 80 + "\n")
+        country_counts = merged_df['country'].value_counts().head(20)
+        for country, count in country_counts.items():
+            pct = round(count / len(merged_df) * 100, 2)
+            report.write(f"{country}: {count} ({pct}%)\n")
+    
+    report.write("\n" + "=" * 80 + "\n")
+    report.write("END OF REPORT\n")
+    
+    return report.getvalue()
