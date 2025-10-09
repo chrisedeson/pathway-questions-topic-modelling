@@ -114,7 +114,7 @@ COLUMN_TYPES = {
 }
 
 # ============ Filter Options ============
-CLASSIFICATION_OPTIONS = ["All", "Existing Topic", "New Topic"]
+CLASSIFICATION_OPTIONS = ["All", "Existing Topic", "New Topic", "Uncategorized"]
 SORT_OPTIONS = {
     "Timestamp (Newest First)": ("timestamp", False),
     "Timestamp (Oldest First)": ("timestamp", True),

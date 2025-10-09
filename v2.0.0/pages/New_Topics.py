@@ -10,7 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import COLUMN_DISPLAY_NAMES
-from utils.data_loader import export_to_csv, ensure_data_loaded
+from utils.data_loader import ensure_data_loaded
 
 
 def main():
@@ -41,8 +41,9 @@ def main():
     # new_topics has: topic_name, representative_question, question_count
     new_topics_df = raw_data['new_topics'].copy()
     
-    # Get all questions classified as 'new' from merged_df
-    new_questions_df = merged_df[merged_df['classification'] == 'new'].copy()
+    # Get all questions classified as 'New Topic' from merged_df
+    # Note: classification values are mapped to display-friendly format in merge_data_for_dashboard
+    new_questions_df = merged_df[merged_df['classification'] == 'New Topic'].copy()
     
     # Overview metrics
     st.markdown("## 📊 Overview")
@@ -70,7 +71,7 @@ def main():
     st.markdown("---")
     
     # Topic exploration
-    st.markdown("## 🔍 Explore New Topics")
+    st.markdown("## Explore New Topics")
     
     if new_topics_df.empty:
         st.info("No new topics available to explore.")
@@ -150,17 +151,6 @@ def main():
             height=400,
             hide_index=True
         )
-        
-        # Export this topic
-        st.markdown("---")
-        csv_data = export_to_csv(topic_questions)
-        st.download_button(
-            label=f"📥 Download This Topic (CSV)",
-            data=csv_data,
-            file_name=f"new_topic_{selected_topic_id}.csv",
-            mime="text/csv",
-            help="Download questions from this topic"
-        )
     else:
         st.info(f"No detailed questions found for this topic. Showing summary only.")
     
@@ -183,30 +173,6 @@ def main():
             'Questions': st.column_config.NumberColumn('Questions', width='small')
         }
     )
-    
-    # Export all new topics
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        csv_all_summary = export_to_csv(new_topics_df)
-        st.download_button(
-            label="📥 Download Topics Summary (CSV)",
-            data=csv_all_summary,
-            file_name="new_topics_summary.csv",
-            mime="text/csv",
-            help="Download summary of all new topics"
-        )
-    
-    with col2:
-        if not new_questions_df.empty:
-            csv_all_questions = export_to_csv(new_questions_df)
-            st.download_button(
-                label="📥 Download All New Questions (CSV)",
-                data=csv_all_questions,
-                file_name="all_new_topic_questions.csv",
-                mime="text/csv",
-                help="Download all questions from new topics"
-            )
     
     # Insights and recommendations
     st.markdown("---")
@@ -243,7 +209,7 @@ def main():
     - **Check the representative question** to see what defines the topic
     - **Consider frequency** - topics with more questions may need priority
     - **Compare with existing topics** - ensure new topics are truly unique
-    - **Download data** for offline review and team discussion
+    - Use the native dataframe features to **sort and explore** the data
     """)
 
 

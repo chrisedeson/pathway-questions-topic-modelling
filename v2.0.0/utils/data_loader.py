@@ -279,14 +279,16 @@ def filter_dataframe(
     if date_range and 'timestamp' in filtered_df.columns:
         start_date, end_date = date_range
         # Convert to timezone-aware timestamps if the column is timezone-aware
+        # Start of day for start_date, end of day for end_date
         start_ts = pd.Timestamp(start_date)
-        end_ts = pd.Timestamp(end_date)
+        end_ts = pd.Timestamp(end_date) + pd.Timedelta(days=1) - pd.Timedelta(microseconds=1)
         if filtered_df['timestamp'].dtype.tz is not None:
             start_ts = start_ts.tz_localize('UTC')
             end_ts = end_ts.tz_localize('UTC')
+        # Include records with NaN timestamps OR within date range
         filtered_df = filtered_df[
-            (filtered_df['timestamp'] >= start_ts) &
-            (filtered_df['timestamp'] <= end_ts)
+            filtered_df['timestamp'].isna() |
+            ((filtered_df['timestamp'] >= start_ts) & (filtered_df['timestamp'] <= end_ts))
         ]
     
     # Country filter
@@ -299,8 +301,8 @@ def filter_dataframe(
             filtered_df['input'].str.contains(search_query, case=False, na=False)
         ]
     
-    # Similarity filter
-    if min_similarity is not None and 'similarity_score' in filtered_df.columns:
+    # Similarity filter (only apply if min_similarity > 0 to avoid filtering out NaN values)
+    if min_similarity is not None and min_similarity > 0.0 and 'similarity_score' in filtered_df.columns:
         filtered_df = filtered_df[filtered_df['similarity_score'] >= min_similarity]
     
     return filtered_df

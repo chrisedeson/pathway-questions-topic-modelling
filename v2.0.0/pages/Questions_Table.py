@@ -34,6 +34,7 @@ def main():
         classification = st.selectbox(
             "Classification",
             CLASSIFICATION_OPTIONS,
+            key="classification_filter",
             help="Filter by question classification"
         )
     
@@ -47,6 +48,7 @@ def main():
                 value=(min_date, max_date),
                 min_value=min_date,
                 max_value=max_date,
+                key="date_range_filter",
                 help="Filter questions by date range"
             )
             
@@ -63,7 +65,8 @@ def main():
         "Search in questions",
         placeholder="Enter keywords...",
         help="Search for specific text in questions",
-        label_visibility="collapsed"
+        label_visibility="collapsed",
+        key="search_query_filter"
     )
     
     # Third row: Country and Similarity filters
@@ -75,6 +78,7 @@ def main():
             selected_countries = st.multiselect(
                 "🌍 Countries",
                 countries,
+                key="countries_filter",
                 help="Filter by country (leave empty for all)"
             )
             country_filter = selected_countries if selected_countries else None
@@ -89,6 +93,7 @@ def main():
                 max_value=1.0,
                 value=0.0,
                 step=0.05,
+                key="similarity_filter",
                 help="Filter by minimum similarity score (for existing topics)"
             )
         else:
@@ -96,6 +101,10 @@ def main():
     
     # Clear filters button
     if st.button("🔄 Clear All Filters", use_container_width=False):
+        # Clear all filter widget states
+        for key in ['classification_filter', 'search_query_filter', 'countries_filter', 'similarity_filter', 'date_range_filter']:
+            if key in st.session_state:
+                del st.session_state[key]
         st.rerun()
     
     st.markdown("---")

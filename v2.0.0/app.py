@@ -30,7 +30,7 @@ def main():
     col1, col2 = st.columns([3, 1])
     with col1:
         st.title("BYU Pathway Missionary Question Analysis Dashboard")
-        st.markdown("*Professional insights into student questions and topic discovery*")
+        st.markdown("*Professional insights into missionary questions and topic discovery*")
     
     with col2:
         st.image(
@@ -62,13 +62,10 @@ def main():
     # Calculate KPIs
     kpis = calculate_kpis(merged_df, data)
     
-    # Store in session state for use in other pages
-    if 'merged_df' not in st.session_state:
-        st.session_state['merged_df'] = merged_df
-    if 'raw_data' not in st.session_state:
-        st.session_state['raw_data'] = data
-    if 'kpis' not in st.session_state:
-        st.session_state['kpis'] = kpis
+    # Store in session state for use in other pages (always update to ensure fresh data)
+    st.session_state['merged_df'] = merged_df
+    st.session_state['raw_data'] = data
+    st.session_state['kpis'] = kpis
     
     # Success message
     file_info = get_latest_file_info()
