@@ -261,3 +261,5 @@ models/
 
 # Streamlit cache and temporary files
 .streamlit/
+!.streamlit/config.toml
+!.streamlit/secrets.toml.example
