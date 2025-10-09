@@ -27,7 +27,7 @@ def main():
     # Filters in main page area
     st.markdown("## 🔍 Filters")
     
-    # First row: Classification and Search
+    # First row: Classification and Date Range
     col1, col2 = st.columns(2)
     
     with col1:
@@ -38,34 +38,33 @@ def main():
         )
     
     with col2:
-        search_query = st.text_input(
-            "🔎 Search in questions",
-            placeholder="Enter keywords...",
-            help="Search for specific text in questions"
-        )
-    
-    # Second row: Date Range
-    if 'timestamp' in df.columns:
-        min_date = df['timestamp'].min().date() if not df['timestamp'].isna().all() else datetime.now().date()
-        max_date = df['timestamp'].max().date() if not df['timestamp'].isna().all() else datetime.now().date()
-        
-        st.markdown("#### 📅 Date Range")
-        date_range = st.date_input(
-            "Select date range",
-            value=(min_date, max_date),
-            min_value=min_date,
-            max_value=max_date,
-            help="Filter questions by date range",
-            label_visibility="collapsed"
-        )
-        
-        if len(date_range) == 2:
-            date_filter = date_range
+        if 'timestamp' in df.columns:
+            min_date = df['timestamp'].min().date() if not df['timestamp'].isna().all() else datetime.now().date()
+            max_date = df['timestamp'].max().date() if not df['timestamp'].isna().all() else datetime.now().date()
+            
+            date_range = st.date_input(
+                "📅 Date Range",
+                value=(min_date, max_date),
+                min_value=min_date,
+                max_value=max_date,
+                help="Filter questions by date range"
+            )
+            
+            if len(date_range) == 2:
+                date_filter = date_range
+            else:
+                date_filter = None
         else:
             date_filter = None
-    else:
-        date_filter = None
-        st.info("No timestamp data available")
+    
+    # Second row: Search
+    st.markdown("#### 🔎 Search in Questions")
+    search_query = st.text_input(
+        "Search in questions",
+        placeholder="Enter keywords...",
+        help="Search for specific text in questions",
+        label_visibility="collapsed"
+    )
     
     # Third row: Country and Similarity filters
     col1, col2 = st.columns(2)
