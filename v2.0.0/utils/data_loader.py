@@ -175,6 +175,9 @@ def merge_data_for_dashboard(data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         
         # For consistency, rename topic_name to matched_topic for existing topics
         df['matched_topic'] = df['topic_name']
+        # Remove duplicate topic_name column
+        if 'topic_name' in df.columns:
+            df = df.drop(columns=['topic_name'])
         
         # Add similarity score from similar_questions if available
         if 'similar_questions' in data:
@@ -188,6 +191,10 @@ def merge_data_for_dashboard(data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
                 lambda row: row['confidence'] if row['classification'] == 'Existing Topic' else None,
                 axis=1
             )
+        
+        # Remove duplicate confidence column if it exists
+        if 'confidence' in df.columns:
+            df = df.drop(columns=['confidence'])
         
         # Ensure timestamp is datetime if it exists
         if 'timestamp' in df.columns:
