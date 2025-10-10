@@ -150,7 +150,8 @@ def main():
     st.markdown("### 📝 Questions in This Topic")
     
     topic_name_to_find = selected_topic.get('topic_name', f'Topic {selected_topic_id}')
-    topic_questions = new_questions_df[new_questions_df['topic_name'] == topic_name_to_find].copy()
+    # Note: merged_df uses 'matched_topic' instead of 'topic_name'
+    topic_questions = new_questions_df[new_questions_df['matched_topic'] == topic_name_to_find].copy()
     
     if not topic_questions.empty:
         st.dataframe(
