@@ -198,7 +198,8 @@ def merge_data_for_dashboard(data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         
         # Ensure timestamp is datetime if it exists
         if 'timestamp' in df.columns:
-            df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+            # Use format='ISO8601' to handle various ISO 8601 formats (with/without microseconds)
+            df['timestamp'] = pd.to_datetime(df['timestamp'], format='ISO8601', errors='coerce')
         
         # Final deduplication check - remove any duplicates that may have been introduced by merging
         # Use same logic as notebook: same timestamp AND same question
@@ -238,7 +239,8 @@ def merge_data_for_dashboard(data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
     
     # Ensure timestamp is datetime
     if 'timestamp' in merged_df.columns:
-        merged_df['timestamp'] = pd.to_datetime(merged_df['timestamp'], errors='coerce')
+        # Use format='ISO8601' to handle various ISO 8601 formats (with/without microseconds)
+        merged_df['timestamp'] = pd.to_datetime(merged_df['timestamp'], format='ISO8601', errors='coerce')
     
     # Sort by timestamp descending (newest first)
     if 'timestamp' in merged_df.columns:
@@ -531,7 +533,7 @@ def generate_error_report(merged_df: pd.DataFrame, raw_data: Dict[str, pd.DataFr
     if 'timestamp' in merged_df.columns:
         report.write("\nTIMESTAMP ANALYSIS\n")
         report.write("-" * 80 + "\n")
-        timestamps = pd.to_datetime(merged_df['timestamp'], errors='coerce')
+        timestamps = pd.to_datetime(merged_df['timestamp'], format='ISO8601', errors='coerce')
         valid_timestamps = timestamps.dropna()
         if len(valid_timestamps) > 0:
             report.write(f"Valid timestamps: {len(valid_timestamps)}\n")

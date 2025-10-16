@@ -142,7 +142,7 @@ def plot_timeline(df: pd.DataFrame, key: str = "timeline_line_chart"):
     
     # Group by date and classification
     df_copy = df.copy()
-    df_copy['date'] = pd.to_datetime(df_copy['timestamp']).dt.date
+    df_copy['date'] = pd.to_datetime(df_copy['timestamp'], format='ISO8601').dt.date
     
     timeline_data = df_copy.groupby(['date', 'classification']).size().reset_index(name='count')
     
@@ -257,8 +257,8 @@ def plot_hourly_heatmap(df: pd.DataFrame):
         return
     
     df_copy = df.copy()
-    df_copy['hour'] = pd.to_datetime(df_copy['timestamp']).dt.hour
-    df_copy['day_of_week'] = pd.to_datetime(df_copy['timestamp']).dt.day_name()
+    df_copy['hour'] = pd.to_datetime(df_copy['timestamp'], format='ISO8601').dt.hour
+    df_copy['day_of_week'] = pd.to_datetime(df_copy['timestamp'], format='ISO8601').dt.day_name()
     
     # Create pivot table
     heatmap_data = df_copy.groupby(['day_of_week', 'hour']).size().reset_index(name='count')
