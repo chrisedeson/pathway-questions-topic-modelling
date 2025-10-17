@@ -575,8 +575,13 @@ def plot_sentiment_distribution(df: pd.DataFrame, key: str = "sentiment_dist"):
         question_lower = str(question).lower()
         
         # Negative indicators
-        negative_words = ['not', 'no', 'never', 'can\'t', 'cannot', 'won\'t', 'don\'t', 'problem', 
-                         'issue', 'error', 'fail', 'wrong', 'difficult', 'confused', 'help']
+        negative_words = ['not', 'no', 'never', 'can\'t', 'cannot', 'won\'t', 'don\'t', 'problem', \
+                  'issue', 'error', 'fail', 'failed', 'failure', 'wrong', 'difficult', \
+                  'confused', 'help', 'frustrated', 'unable', 'delay', 'late', 'missing', \
+                  'lost', 'broken', 'bug', 'crash', 'slow', 'unresponsive', 'disconnect', \
+                  'timeout', 'cancel', 'cancelled', 'reject', 'rejected', 'incomplete', \
+                  'conflict', 'error message', 'blocked', 'denied', 'unavailable', 'complain']
+
         # Positive indicators
         positive_words = ['thank', 'great', 'good', 'excellent', 'appreciate', 'perfect', 'love']
         
@@ -677,11 +682,11 @@ def plot_topic_evolution(df: pd.DataFrame, top_n: int = 5, key: str = "topic_evo
         hovermode='x unified',
         legend=dict(
             title="Topic",
-            orientation="v",
-            yanchor="top",
-            y=1,
-            xanchor="left",
-            x=1.02
+            orientation="h",
+            yanchor="bottom",
+            y=-0.7,
+            xanchor="center",
+            x=0.5
         )
     )
     
