@@ -251,7 +251,10 @@ def main():
         sentiment_df = plot_sentiment_distribution(df, key="sentiment_analysis_main")
         
         if sentiment_df is not None:
-            with st.expander("💡 Sentiment Insights"):
+            st.markdown("---")
+            
+            # Sentiment insights summary
+            with st.expander("� Sentiment Insights"):
                 sentiment_counts = sentiment_df['sentiment'].value_counts()
                 total = len(sentiment_df)
                 
@@ -266,6 +269,47 @@ def main():
                         st.warning(f"⚠️ **{negative_pct:.1f}%** of questions show negative/urgent sentiment. Consider reviewing these for priority support.")
                     else:
                         st.success(f"✅ Only **{negative_pct:.1f}%** of questions show negative/urgent sentiment.")
+            
+            # Filter by sentiment
+            st.markdown("#### 📋 Questions by Sentiment")
+            
+            col1, col2 = st.columns([1, 3])
+            
+            with col1:
+                sentiment_filter = st.selectbox(
+                    "Filter by Sentiment",
+                    ["All"] + sorted(sentiment_df['sentiment'].unique().tolist()),
+                    key="sentiment_filter"
+                )
+            
+            with col2:
+                search_term = st.text_input(
+                    "Search in questions",
+                    placeholder="Type to search...",
+                    key="sentiment_search"
+                )
+            
+            # Apply filters
+            filtered_sentiment_df = sentiment_df.copy()
+            
+            if sentiment_filter != "All":
+                filtered_sentiment_df = filtered_sentiment_df[filtered_sentiment_df['sentiment'] == sentiment_filter]
+            
+            if search_term:
+                filtered_sentiment_df = filtered_sentiment_df[
+                    filtered_sentiment_df['question'].str.contains(search_term, case=False, na=False)
+                ]
+            
+            # Show count
+            st.markdown(f"**Showing {len(filtered_sentiment_df):,} of {len(sentiment_df):,} questions**")
+            
+            # Display the table
+            st.dataframe(
+                filtered_sentiment_df[['question', 'sentiment']],
+                use_container_width=True,
+                hide_index=True,
+                height=400
+            )
         
         st.markdown("---")
         
