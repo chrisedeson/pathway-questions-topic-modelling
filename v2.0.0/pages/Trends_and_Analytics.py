@@ -13,7 +13,9 @@ from utils.data_loader import ensure_data_loaded
 from utils.visualizations import (
     create_kpi_cards, plot_classification_distribution, plot_country_distribution,
     plot_timeline, plot_similarity_distribution, plot_top_topics,
-    plot_hourly_heatmap, plot_language_distribution
+    plot_hourly_heatmap, plot_language_distribution,
+    plot_sentiment_distribution, identify_repeat_questions, 
+    plot_activity_heatmap_with_insights
 )
 
 # Configure page settings (needed for direct page access)
@@ -43,11 +45,12 @@ def main():
     st.markdown("---")
     
     # Main visualizations in tabs
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📊 Overview",
         "🌍 Geographic Insights",
         "⏰ Temporal Patterns",
-        "🎯 Topic Analysis"
+        "🎯 Topic Analysis",
+        "🔬 Advanced Insights"
     ])
     
     with tab1:
@@ -135,9 +138,28 @@ def main():
         
         st.markdown("---")
         
-        # Heatmap
+        # Enhanced heatmap with insights
         st.markdown("### 🗓️ Activity Heatmap")
-        plot_hourly_heatmap(df)
+        insights = plot_activity_heatmap_with_insights(df, key="activity_heatmap_enhanced")
+        
+        # Display insights if available
+        if insights:
+            st.markdown("---")
+            st.markdown("### 📊 Activity Insights")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("**🔥 Peak Activity:**")
+                st.markdown(f"- **Peak Hour:** {insights['peak_hour']}:00 ({insights['peak_hour_count']} questions)")
+                st.markdown(f"- **Peak Day:** {insights['peak_day']} ({insights['peak_day_count']} questions)")
+                st.success("**💡 Tip:** Schedule support staff during peak hours for maximum impact")
+            
+            with col2:
+                st.markdown("**📉 Low Activity:**")
+                st.markdown(f"- **Low Hour:** {insights['low_hour']}:00 ({insights['low_hour_count']} questions)")
+                st.markdown(f"- **Low Day:** {insights['low_day']} ({insights['low_day_count']} questions)")
+                st.info("**💡 Tip:** Use low-activity periods for maintenance and updates")
         
         st.markdown("---")
         
@@ -160,8 +182,14 @@ def main():
                         **Activity Patterns:**
                         - Most questions are asked around **{peak_hour}:00**
                         - Most active day: **{peak_day}**
-                    - Use this information to optimize support staff scheduling
-                    """)
+                        - Use this information to optimize support staff scheduling
+                        
+                        **Recommendations:**
+                        - Ensure adequate support coverage during peak hours
+                        - Consider automated responses during low-activity periods
+                        - Monitor trends for seasonal variations
+                        """)
+
     
     with tab4:
         st.markdown("### 🎯 Topic Analysis")
@@ -209,6 +237,128 @@ def main():
             - Consider adding frequently appearing new topics to the official taxonomy
             - Use topic distribution to allocate resources effectively
             """)
+    
+    with tab5:
+        st.markdown("### 🔬 Advanced Insights")
+        st.markdown("*Sentiment analysis, repeat questions, and deeper patterns*")
+        
+        st.markdown("---")
+        
+        # Sentiment Analysis
+        st.markdown("#### 😊 Question Sentiment Analysis")
+        st.markdown("Understanding the emotional tone of questions helps identify urgent or frustrated users.")
+        
+        sentiment_df = plot_sentiment_distribution(df, key="sentiment_analysis_main")
+        
+        if sentiment_df is not None:
+            with st.expander("💡 Sentiment Insights"):
+                sentiment_counts = sentiment_df['sentiment'].value_counts()
+                total = len(sentiment_df)
+                
+                st.markdown("**Sentiment Breakdown:**")
+                for sentiment, count in sentiment_counts.items():
+                    pct = (count / total * 100)
+                    st.markdown(f"- **{sentiment}**: {count:,} questions ({pct:.1f}%)")
+                
+                if 'Negative/Urgent' in sentiment_counts.index:
+                    negative_pct = (sentiment_counts['Negative/Urgent'] / total * 100)
+                    if negative_pct > 30:
+                        st.warning(f"⚠️ **{negative_pct:.1f}%** of questions show negative/urgent sentiment. Consider reviewing these for priority support.")
+                    else:
+                        st.success(f"✅ Only **{negative_pct:.1f}%** of questions show negative/urgent sentiment.")
+        
+        st.markdown("---")
+        
+        # Repeat Questions
+        st.markdown("#### 🔄 Frequently Asked Questions")
+        st.markdown("Identifying repeat questions helps prioritize FAQ creation and self-service content.")
+        
+        repeat_df = identify_repeat_questions(df, key="repeat_questions_main")
+        
+        if repeat_df is not None:
+            with st.expander("💡 Repeat Questions Insights"):
+                total_repeats = repeat_df['Times Asked'].sum()
+                unique_repeats = len(repeat_df)
+                total_questions = len(df)
+                repeat_coverage = (total_repeats / total_questions * 100)
+                
+                st.markdown(f"""
+                **Key Findings:**
+                - **{unique_repeats}** questions are asked multiple times
+                - These **{unique_repeats}** questions account for **{total_repeats:,}** total asks
+                - This represents **{repeat_coverage:.1f}%** of all questions
+                
+                **Action Items:**
+                - Create FAQ entries for top repeat questions
+                - Improve search functionality to surface existing answers
+                - Consider adding these to onboarding materials
+                - Develop self-service content to reduce support burden
+                """)
+                
+                # Show the data table
+                st.markdown("**Detailed Repeat Questions:**")
+                st.dataframe(repeat_df, use_container_width=True, hide_index=True)
+        
+        st.markdown("---")
+        
+        # Response Quality Analysis
+        if 'user_feedback' in df.columns and df['user_feedback'].notna().any():
+            st.markdown("#### ⭐ Response Quality Analysis")
+            st.markdown("Analyzing user feedback to improve response quality.")
+            
+            feedback_df = df[df['user_feedback'].notna()].copy()
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("**Overall Feedback Metrics:**")
+                
+                total_feedback = len(feedback_df)
+                helpful_count = len(feedback_df[feedback_df['user_feedback'] == 'helpful'])
+                unhelpful_count = len(feedback_df[feedback_df['user_feedback'] == 'unhelpful'])
+                
+                helpful_rate = (helpful_count / total_feedback * 100) if total_feedback > 0 else 0
+                unhelpful_rate = (unhelpful_count / total_feedback * 100) if total_feedback > 0 else 0
+                
+                st.metric("Total Feedback", f"{total_feedback:,}")
+                st.metric("Helpful Rate", f"{helpful_rate:.1f}%", delta=f"{helpful_count:,} responses")
+                st.metric("Unhelpful Rate", f"{unhelpful_rate:.1f}%", delta=f"{unhelpful_count:,} responses")
+            
+            with col2:
+                st.markdown("**Feedback by Classification:**")
+                
+                if 'classification' in feedback_df.columns:
+                    feedback_by_class = feedback_df.groupby(['classification', 'user_feedback']).size().unstack(fill_value=0)
+                    
+                    if not feedback_by_class.empty:
+                        for classification in feedback_by_class.index:
+                            total = feedback_by_class.loc[classification].sum()
+                            if 'helpful' in feedback_by_class.columns:
+                                helpful = feedback_by_class.loc[classification, 'helpful']
+                                rate = (helpful / total * 100) if total > 0 else 0
+                                st.markdown(f"**{classification}**: {rate:.1f}% helpful ({total} responses)")
+            
+            with st.expander("💡 Quality Improvement Recommendations"):
+                if unhelpful_rate > 20:
+                    st.warning("""
+                    **⚠️ High Unhelpful Rate Detected**
+                    
+                    With over 20% of responses marked as unhelpful, consider:
+                    - Reviewing and improving response templates
+                    - Training staff on common question patterns
+                    - Implementing response quality checks
+                    - Gathering more detailed feedback on what was unhelpful
+                    """)
+                else:
+                    st.success("""
+                    **✅ Good Response Quality**
+                    
+                    Your helpful rate is strong! Continue to:
+                    - Monitor feedback trends for any changes
+                    - Share best practices from high-quality responses
+                    - Use successful responses as templates
+                    """)
+
     
     # Footer
     st.markdown("---")

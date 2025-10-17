@@ -97,10 +97,12 @@ def main():
     
     Use the sidebar to navigate between different sections:
     
-    - **app** (Home): Overview and key metrics
-    - **Questions Table**: Interactive table with filters and search
-    - **Trends & Analytics**: Detailed visualizations and insights
-    - **New Topics**: Explore newly discovered topics
+    - **📊 app** (Home): Overview and key metrics
+    - **📋 Questions Table**: Interactive table with filters and search
+    - **📈 Trends & Analytics**: Detailed visualizations and insights with advanced analytics
+    - **🆕 New Topics**: Explore newly discovered topics
+    - **📅 Weekly Insights**: Week-by-week topic analysis and trends
+    - **🌍 Regional Insights**: Geographic patterns and localization opportunities
     
     💡 **Tip:** All filters and sorting happen instantly without page refresh!
     """)
