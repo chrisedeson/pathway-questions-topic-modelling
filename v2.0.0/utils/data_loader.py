@@ -602,3 +602,79 @@ def generate_error_report(merged_df: pd.DataFrame, raw_data: Dict[str, pd.DataFr
     report.write("END OF REPORT\n")
     
     return report.getvalue()
+
+@st.cache_data(ttl=300, show_spinner="Loading monitoring data from S3...")
+def load_monitoring_data_from_s3(days_back=30) -> Optional[pd.DataFrame]:
+    """
+    Load all monitoring parquet files from S3 for the last N days.
+    Returns a single DataFrame with all monitoring data.
+    """
+    from config import (
+        AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, MONITORING_S3_BUCKET, 
+        MONITORING_S3_PREFIX, AWS_REGION
+    )
+    
+    try:
+        s3_client = boto3.client(
+            's3',
+            aws_access_key_id=AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+            region_name=AWS_REGION
+        )
+        
+        response = s3_client.list_objects_v2(
+            Bucket=MONITORING_S3_BUCKET,
+            Prefix=f"{MONITORING_S3_PREFIX}/"
+        )
+        
+        if 'Contents' not in response:
+            st.warning("No monitoring reports found in S3 bucket.")
+            return None
+        
+        reports_to_load = []
+        cutoff_date = datetime.now() - pd.Timedelta(days=days_back)
+        
+        for obj in response['Contents']:
+            key = obj['Key']
+            if key.endswith('.parquet'):
+                try:
+                    # Ensure last_modified is timezone-aware for comparison
+                    last_modified_utc = obj['LastModified'].replace(tzinfo=None)
+                    if last_modified_utc >= cutoff_date:
+                        reports_to_load.append(key)
+                except Exception as e:
+                    st.warning(f"Could not parse date for file {key}: {e}")
+                    continue
+        
+        if not reports_to_load:
+            st.warning(f"No monitoring reports found in the last {days_back} days.")
+            return None
+        
+        dfs = []
+        for key in reports_to_load:
+            try:
+                obj = s3_client.get_object(Bucket=MONITORING_S3_BUCKET, Key=key)
+                buffer = BytesIO(obj['Body'].read())
+                df = pd.read_parquet(buffer)
+                dfs.append(df)
+            except Exception as e:
+                st.error(f"Error loading report {key}: {str(e)}")
+        
+        if not dfs:
+            return None
+            
+        # Combine all dataframes
+        combined_df = pd.concat(dfs, ignore_index=True)
+        
+        # Convert timestamp to datetime
+        if 'timestamp' in combined_df.columns:
+            combined_df['timestamp'] = pd.to_datetime(combined_df['timestamp'])
+        
+        # Sort by timestamp
+        combined_df = combined_df.sort_values('timestamp')
+        
+        return combined_df
+
+    except Exception as e:
+        st.error(f"Error connecting to S3 for monitoring data: {str(e)}")
+        return None
