@@ -39,6 +39,11 @@ AWS_S3_BUCKET = get_config("AWS_S3_BUCKET", "byupathway-public")
 AWS_S3_PREFIX = get_config("AWS_S3_PREFIX", "topic-modeling-data")
 AWS_REGION = "us-east-1"
 
+# Monitoring S3 Configuration
+MONITORING_S3_BUCKET = get_config("MONITORING_S3_BUCKET", "byupathway-public")
+MONITORING_S3_PREFIX = get_config("MONITORING_S3_PREFIX", "pathway-chatbot-backend-monitoring")
+
+
 # ============ File Naming Patterns ============
 # The notebook outputs these files with timestamp suffixes
 FILE_PATTERNS = {
