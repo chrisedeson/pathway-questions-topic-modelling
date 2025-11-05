@@ -273,8 +273,13 @@ def main():
     
     # Display table with Streamlit's native interactive dataframe
     if not filtered_df.empty:
+        # Create a display copy and remove newlines from output column for clean CSV downloads
+        display_df = filtered_df.copy()
+        if 'output' in display_df.columns:
+            display_df['output'] = display_df['output'].astype(str).str.replace('\n', ' ', regex=False).str.replace('\r', ' ', regex=False)
+        
         st.dataframe(
-            filtered_df,
+            display_df,
             use_container_width=True,
             height=600,
             hide_index=True

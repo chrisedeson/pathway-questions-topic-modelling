@@ -154,8 +154,13 @@ def main():
     topic_questions = new_questions_df[new_questions_df['matched_topic'] == topic_name_to_find].copy()
     
     if not topic_questions.empty:
+        # Clean output column for CSV downloads
+        display_topic_questions = topic_questions.copy()
+        if 'output' in display_topic_questions.columns:
+            display_topic_questions['output'] = display_topic_questions['output'].astype(str).str.replace('\n', ' ', regex=False).str.replace('\r', ' ', regex=False)
+        
         st.dataframe(
-            topic_questions,
+            display_topic_questions,
             use_container_width=True,
             height=400,
             hide_index=True
@@ -171,6 +176,10 @@ def main():
     # Display the summary table
     display_df = new_topics_df[['topic_name', 'representative_question', 'question_count']].copy()
     display_df.columns = ['Topic Name', 'Representative Question', 'Questions']
+    
+    # Clean representative_question column for CSV downloads
+    if 'Representative Question' in display_df.columns:
+        display_df['Representative Question'] = display_df['Representative Question'].astype(str).str.replace('\n', ' ', regex=False).str.replace('\r', ' ', regex=False)
     
     st.dataframe(
         display_df,
