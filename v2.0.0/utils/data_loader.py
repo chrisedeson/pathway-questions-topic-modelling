@@ -603,17 +603,20 @@ def generate_error_report(merged_df: pd.DataFrame, raw_data: Dict[str, pd.DataFr
     
     return report.getvalue()
 
-@st.cache_data(ttl=300, show_spinner="Loading monitoring data from S3...")
+@st.cache_data(ttl=300, show_spinner="Loading monitoring data...")
 def load_monitoring_data_from_s3(days_back=30) -> Optional[pd.DataFrame]:
     """
-    Load all monitoring parquet files from S3 for the last N days.
+    Load all monitoring parquet files from S3 (or local fallback) for the last N days.
     Returns a single DataFrame with all monitoring data.
+    
+    Note: If days_back is set very high (e.g., 9999), it loads ALL available data.
     """
     from config import (
         AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, MONITORING_S3_BUCKET, 
         MONITORING_S3_PREFIX, AWS_REGION
     )
     
+    # Try S3 first
     try:
         s3_client = boto3.client(
             's3',
@@ -627,40 +630,109 @@ def load_monitoring_data_from_s3(days_back=30) -> Optional[pd.DataFrame]:
             Prefix=f"{MONITORING_S3_PREFIX}/"
         )
         
-        if 'Contents' not in response:
-            st.warning("No monitoring reports found in S3 bucket.")
-            return None
-        
         reports_to_load = []
-        cutoff_date = datetime.now() - pd.Timedelta(days=days_back)
         
-        for obj in response['Contents']:
-            key = obj['Key']
-            if key.endswith('.parquet'):
-                try:
-                    # Ensure last_modified is timezone-aware for comparison
-                    last_modified_utc = obj['LastModified'].replace(tzinfo=None)
-                    if last_modified_utc >= cutoff_date:
-                        reports_to_load.append(key)
-                except Exception as e:
-                    st.warning(f"Could not parse date for file {key}: {e}")
-                    continue
+        if 'Contents' in response:
+            # Set cutoff date (or load ALL if days_back is very high)
+            if days_back >= 9999:
+                cutoff_date = datetime(2000, 1, 1)  # Load everything
+                st.info(f"📊 Loading ALL available monitoring data from S3...")
+            else:
+                cutoff_date = datetime.now() - pd.Timedelta(days=days_back)
+            
+            for obj in response['Contents']:
+                key = obj['Key']
+                if key.endswith('.parquet'):
+                    try:
+                        last_modified_utc = obj['LastModified'].replace(tzinfo=None)
+                        if last_modified_utc >= cutoff_date:
+                            reports_to_load.append({
+                                'key': key,
+                                'last_modified': last_modified_utc,
+                                'source': 's3'
+                            })
+                    except Exception as e:
+                        st.warning(f"Could not parse date for file {key}: {e}")
+                        continue
+        
+        # If S3 has no files, try local fallback
+        if not reports_to_load:
+            st.info("📂 No files in S3. Checking local monitoring_reports directory...")
+            
+            # Try to find local files from backend directory
+            local_paths = [
+                '/home/chris/byu-pathway/pathway-chatbot/backend/monitoring_reports',
+                '../pathway-chatbot/backend/monitoring_reports',
+                '../../pathway-chatbot/backend/monitoring_reports'
+            ]
+            
+            if days_back >= 9999:
+                cutoff_date = datetime(2000, 1, 1)
+            else:
+                cutoff_date = datetime.now() - pd.Timedelta(days=days_back)
+            
+            for local_dir in local_paths:
+                if os.path.exists(local_dir):
+                    st.info(f"✅ Found local monitoring reports at: {local_dir}")
+                    
+                    for filename in os.listdir(local_dir):
+                        if filename.endswith('.parquet') and filename.startswith('metrics_'):
+                            filepath = os.path.join(local_dir, filename)
+                            # Extract date from filename: metrics_20251023_133111.parquet
+                            try:
+                                date_str = filename.split('_')[1]  # "20251023"
+                                file_date = datetime.strptime(date_str, '%Y%m%d')
+                                
+                                if file_date >= cutoff_date:
+                                    reports_to_load.append({
+                                        'key': filepath,
+                                        'last_modified': file_date,
+                                        'source': 'local'
+                                    })
+                            except Exception as e:
+                                st.warning(f"Could not parse date from {filename}: {e}")
+                    
+                    break  # Stop searching after finding first valid directory
         
         if not reports_to_load:
-            st.warning(f"No monitoring reports found in the last {days_back} days.")
+            st.warning(f"⚠️ No monitoring reports found in the last {days_back} days.")
+            st.info("""
+            **💡 Possible reasons:**
+            - Backend monitoring hasn't generated reports yet
+            - Files are older than the selected time period (try increasing the slider to 90 days)
+            - S3 upload hasn't run yet (check ENABLE_MONITORING_S3_UPLOAD in backend)
+            - Local files not found in expected directory
+            """)
             return None
         
+        # Sort by date (newest first) and show info
+        reports_to_load.sort(key=lambda x: x['last_modified'], reverse=True)
+        oldest = reports_to_load[-1]['last_modified']
+        newest = reports_to_load[0]['last_modified']
+        source_counts = {'s3': 0, 'local': 0}
+        for r in reports_to_load:
+            source_counts[r['source']] += 1
+        
+        st.success(f"✅ Found {len(reports_to_load)} monitoring files ({source_counts['s3']} from S3, {source_counts['local']} local)")
+        st.caption(f"📅 Date range: {oldest.strftime('%Y-%m-%d')} to {newest.strftime('%Y-%m-%d')}")
+        
+        # Load all files
         dfs = []
-        for key in reports_to_load:
+        for report in reports_to_load:
             try:
-                obj = s3_client.get_object(Bucket=MONITORING_S3_BUCKET, Key=key)
-                buffer = BytesIO(obj['Body'].read())
-                df = pd.read_parquet(buffer)
+                if report['source'] == 's3':
+                    obj = s3_client.get_object(Bucket=MONITORING_S3_BUCKET, Key=report['key'])
+                    buffer = BytesIO(obj['Body'].read())
+                    df = pd.read_parquet(buffer)
+                else:  # local
+                    df = pd.read_parquet(report['key'])
+                
                 dfs.append(df)
             except Exception as e:
-                st.error(f"Error loading report {key}: {str(e)}")
+                st.error(f"Error loading report {report['key']}: {str(e)}")
         
         if not dfs:
+            st.error("❌ Failed to load any monitoring data.")
             return None
             
         # Combine all dataframes
@@ -673,8 +745,12 @@ def load_monitoring_data_from_s3(days_back=30) -> Optional[pd.DataFrame]:
         # Sort by timestamp
         combined_df = combined_df.sort_values('timestamp')
         
+        # Show data summary
+        st.caption(f"📊 Loaded {len(combined_df):,} monitoring records")
+        
         return combined_df
 
     except Exception as e:
-        st.error(f"Error connecting to S3 for monitoring data: {str(e)}")
+        st.error(f"❌ Error loading monitoring data: {str(e)}")
+        st.exception(e)  # Show full traceback for debugging
         return None
