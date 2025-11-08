@@ -534,11 +534,20 @@ def create_time_series_charts(df: pd.DataFrame):
             else '🔴 Server Error (5xx)'
         )
         
+        # Define custom colors to match your preferred legend colors
+        color_map = {
+            '🟡 Client Error (4xx)': '#FFD700',  # Yellow
+            '🟢 Success (2xx)': "#037A03",       # Green
+            '🔵 Redirect (3xx)': '#0000FF',      # Blue
+            '🔴 Server Error (5xx)': '#FF0000'   # Red
+        }
+        
         fig = px.scatter(
             df_with_status,
             x='timestamp',
             y='duration_seconds',
             color='status_category',
+            color_discrete_map=color_map,
             title='Response Time by Request Status',
             labels={'duration_seconds': 'Response Time (seconds)'},
             hover_data=['endpoint', 'method']
@@ -681,13 +690,20 @@ def create_system_diagnostics(df: pd.DataFrame):
                 line_dash="dash",
                 line_color="red",
                 annotation_text="🔴 High CPU Zone",
-                annotation_position="right"
+                annotation_position="top left",
+                
             )
             
             fig.update_layout(
                 xaxis_title="Time",
                 yaxis_title="CPU Usage (%)",
-                hovermode='x unified'
+                hovermode='x unified',
+                legend=dict(
+                    yanchor="top",
+                    y=4,
+                    xanchor="right",
+                    x=1
+                )
             )
             
             st.plotly_chart(fig, use_container_width=True)
@@ -790,11 +806,18 @@ def create_system_diagnostics(df: pd.DataFrame):
         df_corr = df.copy()
         df_corr['is_error'] = (df_corr['status_code'] >= 400).astype(int)
         
+        # Define custom colors to match your preferred colors
+        color_map = {
+            '🟢 Success': '#037A03',  # Green
+            '🔴 Error': '#FF0000'     # Red
+        }
+        
         fig = px.scatter(
             df_corr,
             x='memory_percent' if 'memory_percent' in df_corr.columns else 'memory_rss_mb',
             y='duration_seconds',
             color=df_corr['is_error'].map({0: '🟢 Success', 1: '🔴 Error'}),
+            color_discrete_map=color_map,
             title='Memory vs Response Time (colored by status)',
             labels={
                 'memory_percent': 'Memory Usage (%)',
