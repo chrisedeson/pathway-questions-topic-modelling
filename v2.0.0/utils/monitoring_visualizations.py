@@ -6,8 +6,11 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from typing import Dict
+from typing import Dict, Optional
 import numpy as np
+from sklearn.linear_model import LinearRegression
+from datetime import timedelta
+import json
 
 
 def calculate_health_score(df: pd.DataFrame) -> int:
@@ -196,6 +199,153 @@ def create_crash_analysis(df: pd.DataFrame):
     
     st.markdown("---")
     
+    # Detect uptime resets (indicates restarts/crashes)
+    if 'system_uptime_seconds' in df.columns:
+        st.markdown("### 🔄 Uptime Resets & Crash Detection")
+        st.markdown("*System restarts often indicate crashes*")
+        
+        df_sorted = df.sort_values('timestamp').copy()
+        df_sorted['uptime_reset'] = df_sorted['system_uptime_seconds'].diff() < 0
+        
+        resets = df_sorted[df_sorted['uptime_reset']].copy()
+        
+        if len(resets) > 0:
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric(
+                    "🔄 Detected Restarts",
+                    len(resets),
+                    help="Number of times the system restarted (uptime reset to zero)"
+                )
+            
+            with col2:
+                # Calculate average uptime between restarts
+                if len(resets) > 1:
+                    time_diffs = resets['timestamp'].diff().dropna()
+                    avg_uptime_hours = time_diffs.mean().total_seconds() / 3600
+                    st.metric(
+                        "⏱️ Avg Time Between Restarts",
+                        f"{avg_uptime_hours:.1f} hours",
+                        help="How long the system typically runs before restarting"
+                    )
+                else:
+                    st.metric("⏱️ Avg Time Between Restarts", "N/A")
+            
+            with col3:
+                # Check if recent (last 24 hours)
+                last_reset = resets['timestamp'].max()
+                hours_since_reset = (df['timestamp'].max() - last_reset).total_seconds() / 3600
+                if hours_since_reset < 1:
+                    st.error(f"⚠️ **{hours_since_reset*60:.0f} min ago**")
+                    st.caption("Last restart")
+                elif hours_since_reset < 24:
+                    st.warning(f"⏰ **{hours_since_reset:.1f} hours ago**")
+                    st.caption("Last restart")
+                else:
+                    st.success(f"✅ **{hours_since_reset/24:.1f} days ago**")
+                    st.caption("Last restart")
+            
+            # OOM (Out-of-Memory) diagnosis
+            st.markdown("#### 🔍 Crash Diagnosis: Was it OOMKilled?")
+            
+            # Check memory levels at restart points
+            oom_likely = []
+            for idx, reset_row in resets.iterrows():
+                # Get memory just before reset
+                before_reset = df_sorted[df_sorted['timestamp'] < reset_row['timestamp']].tail(5)
+                if not before_reset.empty:
+                    avg_memory_before = before_reset['memory_rss_mb'].mean()
+                    memory_percent_before = (avg_memory_before / 2048) * 100  # Assuming 2GB limit
+                    
+                    if memory_percent_before >= 90:
+                        oom_likely.append({
+                            'timestamp': reset_row['timestamp'],
+                            'memory_mb': avg_memory_before,
+                            'memory_percent': memory_percent_before,
+                            'likely_oom': True
+                        })
+                    else:
+                        oom_likely.append({
+                            'timestamp': reset_row['timestamp'],
+                            'memory_mb': avg_memory_before,
+                            'memory_percent': memory_percent_before,
+                            'likely_oom': False
+                        })
+            
+            if oom_likely:
+                oom_df = pd.DataFrame(oom_likely)
+                oom_count = oom_df['likely_oom'].sum()
+                graceful_count = len(oom_df) - oom_count
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if oom_count > 0:
+                        st.error(f"🔴 **{oom_count} OOMKilled**")
+                        st.caption("Memory >= 90% before restart")
+                        st.markdown("**These crashes were likely caused by running out of memory!**")
+                    else:
+                        st.success("✅ **No OOMKilled crashes**")
+                        st.caption("Memory was below 90%")
+                
+                with col2:
+                    if graceful_count > 0:
+                        st.info(f"🔵 **{graceful_count} Graceful**")
+                        st.caption("Memory < 90% before restart")
+                        st.markdown("**These were likely intentional restarts or deployments.**")
+                
+                # Show restart timeline with memory correlation
+                fig = go.Figure()
+                
+                # All memory usage
+                fig.add_trace(go.Scatter(
+                    x=df_sorted['timestamp'],
+                    y=df_sorted['memory_rss_mb'],
+                    mode='lines',
+                    name='Memory Usage',
+                    line=dict(color='lightblue', width=1),
+                    opacity=0.5
+                ))
+                
+                # Mark restart points
+                for idx, row in oom_df.iterrows():
+                    color = 'red' if row['likely_oom'] else 'green'
+                    symbol = 'x' if row['likely_oom'] else 'circle'
+                    name = 'OOMKilled' if row['likely_oom'] else 'Graceful Restart'
+                    
+                    fig.add_trace(go.Scatter(
+                        x=[row['timestamp']],
+                        y=[row['memory_mb']],
+                        mode='markers',
+                        name=name,
+                        marker=dict(size=15, color=color, symbol=symbol, line=dict(color='white', width=2)),
+                        showlegend=True,
+                        hovertemplate=f'<b>{name}</b><br>Time: %{{x}}<br>Memory: {row["memory_mb"]:.0f} MB ({row["memory_percent"]:.1f}%)<extra></extra>'
+                    ))
+                
+                # Add emergency threshold line
+                fig.add_hline(
+                    y=1843,
+                    line_dash="dash",
+                    line_color="red",
+                    annotation_text="🔴 Emergency Threshold (90%)",
+                    annotation_position="right"
+                )
+                
+                fig.update_layout(
+                    title="Restart Timeline with Memory Correlation",
+                    xaxis_title="Time",
+                    yaxis_title="Memory (MB)",
+                    hovermode='closest'
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.success("✅ **No unexpected restarts detected!** System has been stable.")
+    
+    st.markdown("---")
+    
     # Timeline of crashes
     st.markdown("### 📅 When Did Crashes Happen?")
     
@@ -340,7 +490,7 @@ def create_crash_analysis(df: pd.DataFrame):
 
 
 def create_memory_leak_detector(df: pd.DataFrame):
-    """Detect potential memory leaks with trend analysis."""
+    """Detect potential memory leaks with trend analysis and predictions."""
     st.header("💾 Memory Usage & Leak Detection")
     st.markdown("*Is memory growing over time?*")
     
@@ -351,6 +501,48 @@ def create_memory_leak_detector(df: pd.DataFrame):
     window_size = min(50, len(df_sorted) // 4)
     df_sorted['memory_trend'] = df_sorted['memory_rss_mb'].rolling(window=window_size, min_periods=1).mean()
     
+    # Linear regression for prediction
+    prediction_result = None
+    if len(df_sorted) > 10:
+        # Prepare data for linear regression
+        df_sorted['time_numeric'] = (df_sorted['timestamp'] - df_sorted['timestamp'].min()).dt.total_seconds()
+        X = df_sorted['time_numeric'].values.reshape(-1, 1)
+        y = df_sorted['memory_rss_mb'].values
+        
+        # Train model
+        model = LinearRegression()
+        model.fit(X, y)
+        
+        # Calculate predictions
+        df_sorted['memory_predicted'] = model.predict(X)
+        
+        # Predict future (24 hours ahead)
+        current_time = df_sorted['time_numeric'].max()
+        future_times = np.array([current_time + (3600 * i) for i in range(1, 25)]).reshape(-1, 1)
+        future_predictions = model.predict(future_times)
+        
+        # Check if trending upward
+        slope_mb_per_hour = model.coef_[0] / 3600  # Convert per-second to per-hour
+        is_growing = slope_mb_per_hour > 0.1  # Growing more than 0.1 MB/hour
+        
+        # Calculate time until critical threshold (90% of 2048 MB = 1843 MB)
+        EMERGENCY_THRESHOLD_MB = 1843
+        current_avg = df_sorted['memory_rss_mb'].iloc[-100:].mean()
+        
+        hours_until_critical = None
+        if is_growing and slope_mb_per_hour > 0:
+            mb_until_critical = EMERGENCY_THRESHOLD_MB - current_avg
+            if mb_until_critical > 0:
+                hours_until_critical = mb_until_critical / slope_mb_per_hour
+        
+        prediction_result = {
+            'slope_mb_per_hour': slope_mb_per_hour,
+            'is_growing': is_growing,
+            'hours_until_critical': hours_until_critical,
+            'future_predictions': future_predictions,
+            'model_score': model.score(X, y)
+        }
+    
     # Compare first and last averages
     first_100 = min(100, len(df_sorted) // 4)
     last_100 = min(100, len(df_sorted) // 4)
@@ -360,8 +552,8 @@ def create_memory_leak_detector(df: pd.DataFrame):
         last_avg = df_sorted['memory_trend'].iloc[-last_100:].mean()
         memory_growth = ((last_avg - first_avg) / first_avg * 100) if first_avg > 0 else 0
         
-        # Display leak status
-        col1, col2, col3 = st.columns(3)
+        # Display leak status with prediction
+        col1, col2, col3, col4 = st.columns(4)
         
         with col1:
             if memory_growth > 20:
@@ -388,6 +580,26 @@ def create_memory_leak_detector(df: pd.DataFrame):
                 delta=f"{last_avg - first_avg:+.0f} MB",
                 help="Average memory at the end of the period"
             )
+        
+        with col4:
+            if prediction_result and prediction_result['is_growing']:
+                if prediction_result['hours_until_critical']:
+                    hours = prediction_result['hours_until_critical']
+                    if hours < 24:
+                        st.error(f"⏰ **{hours:.1f} hours**")
+                        st.caption("Until critical memory")
+                    elif hours < 72:
+                        st.warning(f"⏰ **{hours/24:.1f} days**")
+                        st.caption("Until critical memory")
+                    else:
+                        st.info(f"⏰ **{hours/24:.0f} days**")
+                        st.caption("Until critical memory")
+                else:
+                    st.success("✅ **Safe**")
+                    st.caption("Below critical threshold")
+            else:
+                st.success("📊 **Stable**")
+                st.caption("No growth detected")
     
     # Memory trend chart
     st.markdown("### 📈 Memory Usage Over Time")
@@ -404,15 +616,38 @@ def create_memory_leak_detector(df: pd.DataFrame):
         hovertemplate='<b>%{x}</b><br>Memory: %{y:.0f} MB<extra></extra>'
     ))
     
-    # Trend line
+    # Trend line (rolling average)
     fig.add_trace(go.Scatter(
         x=df_sorted['timestamp'],
         y=df_sorted['memory_trend'],
         mode='lines',
-        name='Trend',
-        line=dict(color='red', width=2),
+        name='Trend (Rolling Avg)',
+        line=dict(color='orange', width=2),
         hovertemplate='<b>%{x}</b><br>Trend: %{y:.0f} MB<extra></extra>'
     ))
+    
+    # Linear regression prediction line
+    if prediction_result:
+        fig.add_trace(go.Scatter(
+            x=df_sorted['timestamp'],
+            y=df_sorted['memory_predicted'],
+            mode='lines',
+            name='Linear Prediction',
+            line=dict(color='red', width=2, dash='dash'),
+            hovertemplate='<b>%{x}</b><br>Predicted: %{y:.0f} MB<extra></extra>'
+        ))
+        
+        # Add slope annotation
+        slope_text = f"Growth Rate: {prediction_result['slope_mb_per_hour']:.2f} MB/hour"
+        fig.add_annotation(
+            text=slope_text,
+            xref="paper", yref="paper",
+            x=0.02, y=0.98,
+            showarrow=False,
+            bgcolor="rgba(255,255,255,0.8)",
+            bordercolor="red",
+            borderwidth=1
+        )
     
     # Add warning zone if memory is high
     if df_sorted['memory_rss_mb'].max() > 800:
@@ -424,6 +659,15 @@ def create_memory_leak_detector(df: pd.DataFrame):
             annotation_position="right"
         )
     
+    # Add emergency threshold line
+    fig.add_hline(
+        y=1843,
+        line_dash="dash",
+        line_color="red",
+        annotation_text="🔴 Emergency Threshold (90%)",
+        annotation_position="right"
+    )
+    
     fig.update_layout(
         xaxis_title="Time",
         yaxis_title="Memory (MB)",
@@ -432,6 +676,43 @@ def create_memory_leak_detector(df: pd.DataFrame):
     )
     
     st.plotly_chart(fig, use_container_width=True)
+    
+    # Per-endpoint memory breakdown
+    if 'endpoint' in df.columns:
+        st.markdown("### 📊 Memory Usage by Endpoint")
+        st.markdown("*Which endpoints use the most memory?*")
+        
+        endpoint_memory = df.groupby('endpoint').agg({
+            'memory_rss_mb': ['mean', 'max', 'count']
+        }).reset_index()
+        endpoint_memory.columns = ['endpoint', 'avg_memory', 'max_memory', 'request_count']
+        endpoint_memory = endpoint_memory.sort_values('avg_memory', ascending=False).head(10)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            fig = px.bar(
+                endpoint_memory,
+                x='avg_memory',
+                y='endpoint',
+                orientation='h',
+                title='Average Memory by Endpoint (Top 10)',
+                labels={'avg_memory': 'Average Memory (MB)', 'endpoint': 'Endpoint'}
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            fig = px.bar(
+                endpoint_memory,
+                x='max_memory',
+                y='endpoint',
+                orientation='h',
+                title='Peak Memory by Endpoint (Top 10)',
+                labels={'max_memory': 'Peak Memory (MB)', 'endpoint': 'Endpoint'},
+                color='max_memory',
+                color_continuous_scale='Reds'
+            )
+            st.plotly_chart(fig, use_container_width=True)
     
     # Memory distribution
     st.markdown("### 📊 Memory Distribution")
@@ -534,20 +815,11 @@ def create_time_series_charts(df: pd.DataFrame):
             else '🔴 Server Error (5xx)'
         )
         
-        # Define custom colors to match your preferred legend colors
-        color_map = {
-            '🟡 Client Error (4xx)': '#FFD700',  # Yellow
-            '🟢 Success (2xx)': "#037A03",       # Green
-            '🔵 Redirect (3xx)': '#0000FF',      # Blue
-            '🔴 Server Error (5xx)': '#FF0000'   # Red
-        }
-        
         fig = px.scatter(
             df_with_status,
             x='timestamp',
             y='duration_seconds',
             color='status_category',
-            color_discrete_map=color_map,
             title='Response Time by Request Status',
             labels={'duration_seconds': 'Response Time (seconds)'},
             hover_data=['endpoint', 'method']
@@ -592,7 +864,7 @@ def create_time_series_charts(df: pd.DataFrame):
         
         # Hourly traffic
         df_traffic = df.copy()
-        df_traffic['hour'] = df_traffic['timestamp'].dt.floor('H')
+        df_traffic['hour'] = df_traffic['timestamp'].dt.floor('h')
         hourly_requests = df_traffic.groupby('hour').size().reset_index(name='count')
         
         fig = px.bar(
@@ -625,7 +897,7 @@ def create_time_series_charts(df: pd.DataFrame):
             st.success("🎉 No errors found in this period!")
         else:
             # Error timeline
-            errors_df['hour'] = errors_df['timestamp'].dt.floor('H')
+            errors_df['hour'] = errors_df['timestamp'].dt.floor('h')
             hourly_errors = errors_df.groupby(['hour', 'status_code']).size().reset_index(name='count')
             
             fig = px.bar(
@@ -690,20 +962,13 @@ def create_system_diagnostics(df: pd.DataFrame):
                 line_dash="dash",
                 line_color="red",
                 annotation_text="🔴 High CPU Zone",
-                annotation_position="top left",
-                
+                annotation_position="right"
             )
             
             fig.update_layout(
                 xaxis_title="Time",
                 yaxis_title="CPU Usage (%)",
-                hovermode='x unified',
-                legend=dict(
-                    yanchor="top",
-                    y=4,
-                    xanchor="right",
-                    x=1
-                )
+                hovermode='x unified'
             )
             
             st.plotly_chart(fig, use_container_width=True)
@@ -806,18 +1071,11 @@ def create_system_diagnostics(df: pd.DataFrame):
         df_corr = df.copy()
         df_corr['is_error'] = (df_corr['status_code'] >= 400).astype(int)
         
-        # Define custom colors to match your preferred colors
-        color_map = {
-            '🟢 Success': '#037A03',  # Green
-            '🔴 Error': '#FF0000'     # Red
-        }
-        
         fig = px.scatter(
             df_corr,
             x='memory_percent' if 'memory_percent' in df_corr.columns else 'memory_rss_mb',
             y='duration_seconds',
             color=df_corr['is_error'].map({0: '🟢 Success', 1: '🔴 Error'}),
-            color_discrete_map=color_map,
             title='Memory vs Response Time (colored by status)',
             labels={
                 'memory_percent': 'Memory Usage (%)',
@@ -840,3 +1098,302 @@ def create_system_diagnostics(df: pd.DataFrame):
                     st.warning(f"⚠️ **Errors happen when memory is higher!** Errors use {avg_error_mem:.1f}% memory on average, while successes use {avg_success_mem:.1f}%.")
                 else:
                     st.success(f"✅ **Memory doesn't seem to cause errors.** Similar memory usage for both errors ({avg_error_mem:.1f}%) and successes ({avg_success_mem:.1f}%).")
+
+
+def create_data_completeness_check(df: pd.DataFrame):
+    """Check for gaps in monitoring data and assess data quality."""
+    st.header("📋 Data Completeness Check")
+    st.markdown("*Are we collecting monitoring data consistently?*")
+    
+    if df.empty:
+        st.error("❌ No data available for completeness check")
+        return
+    
+    # Sort by timestamp
+    df_sorted = df.sort_values('timestamp').copy()
+    
+    # Calculate expected hourly data points
+    date_range = (df_sorted['timestamp'].max() - df_sorted['timestamp'].min())
+    expected_hours = int(date_range.total_seconds() / 3600)
+    
+    # Group by hour and count records
+    df_sorted['hour_bucket'] = df_sorted['timestamp'].dt.floor('h')
+    hourly_counts = df_sorted.groupby('hour_bucket').size().reset_index(name='count')
+    
+    # Detect gaps (hours with no data)
+    all_hours = pd.date_range(
+        start=df_sorted['timestamp'].min().floor('h'),
+        end=df_sorted['timestamp'].max().floor('h'),
+        freq='h'
+    )
+    
+    gaps = []
+    for i in range(len(all_hours) - 1):
+        hour = all_hours[i]
+        if hour not in hourly_counts['hour_bucket'].values:
+            # Calculate gap duration
+            gap_start = hour
+            gap_end = hour
+            j = i + 1
+            while j < len(all_hours) and all_hours[j] not in hourly_counts['hour_bucket'].values:
+                gap_end = all_hours[j]
+                j += 1
+            
+            gap_hours = (gap_end - gap_start).total_seconds() / 3600 + 1
+            
+            # Classify severity
+            if gap_hours < 1:
+                severity = "minor"
+            elif gap_hours < 6:
+                severity = "warning"
+            else:
+                severity = "critical"
+            
+            gaps.append({
+                'start': gap_start,
+                'end': gap_end,
+                'duration_hours': gap_hours,
+                'severity': severity
+            })
+    
+    # Calculate health score
+    data_points = len(df_sorted)
+    avg_per_hour = data_points / max(expected_hours, 1)
+    gap_penalty = len([g for g in gaps if g['severity'] in ['warning', 'critical']]) * 5
+    completeness_score = max(0, min(100, 100 - gap_penalty))
+    
+    # Display health score
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        if completeness_score >= 90:
+            st.success(f"### 🟢 {completeness_score}/100")
+            st.caption("Excellent data quality")
+        elif completeness_score >= 70:
+            st.warning(f"### 🟡 {completeness_score}/100")
+            st.caption("Some gaps detected")
+        else:
+            st.error(f"### 🔴 {completeness_score}/100")
+            st.caption("Poor data quality")
+    
+    with col2:
+        st.metric(
+            "Total Data Points",
+            f"{data_points:,}",
+            help="Total monitoring records collected"
+        )
+    
+    with col3:
+        st.metric(
+            "Avg Records/Hour",
+            f"{avg_per_hour:.1f}",
+            help="How many records collected each hour on average"
+        )
+    
+    with col4:
+        st.metric(
+            "Data Gaps Found",
+            len(gaps),
+            help="Number of time periods with missing data"
+        )
+    
+    # Show gaps if any exist
+    if gaps:
+        st.markdown("---")
+        st.markdown("### ⚠️ Detected Data Gaps")
+        
+        gaps_df = pd.DataFrame(gaps)
+        
+        # Count by severity
+        severity_counts = gaps_df['severity'].value_counts()
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            critical = severity_counts.get('critical', 0)
+            if critical > 0:
+                st.error(f"🔴 **{critical} Critical**")
+                st.caption(">6 hours missing")
+            else:
+                st.success("✅ **0 Critical**")
+        
+        with col2:
+            warning = severity_counts.get('warning', 0)
+            if warning > 0:
+                st.warning(f"🟡 **{warning} Warnings**")
+                st.caption("1-6 hours missing")
+            else:
+                st.success("✅ **0 Warnings**")
+        
+        with col3:
+            minor = severity_counts.get('minor', 0)
+            if minor > 0:
+                st.info(f"🔵 **{minor} Minor**")
+                st.caption("<1 hour missing")
+            else:
+                st.success("✅ **0 Minor**")
+        
+        # Show gap timeline
+        st.markdown("#### 📅 Gap Timeline")
+        
+        # Create visualization
+        fig = go.Figure()
+        
+        # Add hourly data availability
+        fig.add_trace(go.Scatter(
+            x=hourly_counts['hour_bucket'],
+            y=hourly_counts['count'],
+            mode='lines',
+            name='Records per Hour',
+            fill='tozeroy',
+            line=dict(color='green')
+        ))
+        
+        # Mark gaps
+        for gap in gaps:
+            color = {'minor': 'yellow', 'warning': 'orange', 'critical': 'red'}[gap['severity']]
+            
+            # Use add_shape instead of add_vrect to avoid timestamp arithmetic issues
+            fig.add_shape(
+                type="rect",
+                x0=gap['start'],
+                x1=gap['end'],
+                y0=0,
+                y1=1,
+                yref="paper",
+                fillcolor=color,
+                opacity=0.3,
+                layer="below",
+                line_width=0
+            )
+            
+            # Add annotation separately at a fixed position
+            mid_time = gap['start'] + (gap['end'] - gap['start']) / 2
+            fig.add_annotation(
+                x=mid_time,
+                y=1,
+                yref="paper",
+                text=f"{gap['duration_hours']:.0f}h gap",
+                showarrow=False,
+                yshift=10,
+                font=dict(size=10, color=color),
+                bgcolor="white",
+                opacity=0.8
+            )
+        
+        fig.update_layout(
+            title="Data Collection Timeline - Green areas have data, colored areas are gaps",
+            xaxis_title="Time",
+            yaxis_title="Records Collected",
+            hovermode='x unified'
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Detailed gap table
+        with st.expander("📋 Detailed Gap Report"):
+            gaps_df_display = gaps_df.copy()
+            gaps_df_display['start'] = gaps_df_display['start'].dt.strftime('%Y-%m-%d %H:%M')
+            gaps_df_display['end'] = gaps_df_display['end'].dt.strftime('%Y-%m-%d %H:%M')
+            gaps_df_display = gaps_df_display.sort_values('duration_hours', ascending=False)
+            
+            st.dataframe(gaps_df_display, use_container_width=True)
+    else:
+        st.success("✅ **Perfect! No data gaps detected.** Monitoring is collecting data consistently.")
+
+
+def create_emergency_alert_banner(s3_client=None, bucket: Optional[str] = None, prefix: Optional[str] = None):
+    """
+    Load and display emergency alerts from S3 ALERT_*.json files.
+    Shows a prominent banner at the top of the dashboard.
+    """
+    if not s3_client or not bucket or not prefix:
+        return  # Silently skip if S3 not configured
+    
+    try:
+        # List all ALERT_*.json files
+        response = s3_client.list_objects_v2(
+            Bucket=bucket,
+            Prefix=f"{prefix}/"
+        )
+        
+        alerts = []
+        
+        if 'Contents' in response:
+            for obj in response['Contents']:
+                key = obj['Key']
+                filename = key.split('/')[-1]
+                
+                if filename.startswith('ALERT_') and filename.endswith('.json'):
+                    try:
+                        # Load alert JSON
+                        obj_data = s3_client.get_object(Bucket=bucket, Key=key)
+                        alert_data = json.loads(obj_data['Body'].read().decode('utf-8'))
+                        
+                        # Add metadata
+                        alert_data['alert_file'] = filename
+                        alert_data['alert_time'] = obj['LastModified']
+                        
+                        alerts.append(alert_data)
+                    except Exception as e:
+                        st.error(f"Error loading alert {filename}: {e}")
+        
+        if alerts:
+            # Sort by time (most recent first)
+            alerts.sort(key=lambda x: x['alert_time'], reverse=True)
+            
+            # Show most recent alert prominently
+            latest_alert = alerts[0]
+            
+            # Determine alert color and emoji
+            severity = latest_alert.get('severity', 'warning')
+            if severity == 'critical':
+                alert_color = "🔴"
+                alert_style = "error"
+            else:
+                alert_color = "🟡"
+                alert_style = "warning"
+            
+            # Display alert banner
+            if alert_style == "error":
+                st.error(f"""
+                ### {alert_color} CRITICAL ALERT: {latest_alert.get('alert_type', 'Unknown').replace('_', ' ').title()}
+                
+                **Message:** {latest_alert.get('message', 'No message provided')}
+                
+                **Details:**
+                - Memory Usage: {latest_alert.get('memory_mb', 'N/A')} MB ({latest_alert.get('memory_percent', 'N/A')}%)
+                - Threshold: {latest_alert.get('threshold_mb', 'N/A')} MB ({latest_alert.get('threshold_percent', 'N/A')}%)
+                - System Memory: {latest_alert.get('system_memory_mb', 'N/A')} MB
+                - Alert Time: {latest_alert['alert_time'].strftime('%Y-%m-%d %H:%M:%S UTC')}
+                
+                ⚠️ **Immediate action required!** The system is under high memory pressure.
+                """)
+            else:
+                st.warning(f"""
+                ### {alert_color} WARNING: {latest_alert.get('alert_type', 'Unknown').replace('_', ' ').title()}
+                
+                **Message:** {latest_alert.get('message', 'No message provided')}
+                
+                **Details:**
+                - Memory Usage: {latest_alert.get('memory_mb', 'N/A')} MB ({latest_alert.get('memory_percent', 'N/A')}%)
+                - Alert Time: {latest_alert['alert_time'].strftime('%Y-%m-%d %H:%M:%S UTC')}
+                """)
+            
+            # Show count of other alerts
+            if len(alerts) > 1:
+                with st.expander(f"📋 View All Alerts ({len(alerts)} total)"):
+                    for i, alert in enumerate(alerts, 1):
+                        st.markdown(f"""
+                        **Alert {i}:** {alert.get('alert_type', 'Unknown')} - {alert['alert_time'].strftime('%Y-%m-%d %H:%M:%S UTC')}
+                        - Message: {alert.get('message', 'N/A')}
+                        - Memory: {alert.get('memory_mb', 'N/A')} MB ({alert.get('memory_percent', 'N/A')}%)
+                        - Severity: {alert.get('severity', 'N/A')}
+                        """)
+                        st.markdown("---")
+        
+        return len(alerts) if alerts else 0
+        
+    except Exception as e:
+        # Don't show errors if S3 not accessible (might be intentional)
+        return 0

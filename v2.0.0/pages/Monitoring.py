@@ -18,7 +18,9 @@ from utils.monitoring_visualizations import (
     create_memory_leak_detector,
     create_summary_metrics,
     create_time_series_charts,
-    create_system_diagnostics
+    create_system_diagnostics,
+    create_data_completeness_check,
+    create_emergency_alert_banner
 )
 
 st.set_page_config(
@@ -29,6 +31,34 @@ st.set_page_config(
 
 st.title("📊 Pathway Chatbot Monitoring Dashboard")
 st.markdown("Real-time monitoring and analytics for the Pathway Chatbot backend")
+
+# Load S3 config for emergency alerts
+try:
+    from config import (
+        AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, 
+        MONITORING_S3_BUCKET, MONITORING_S3_PREFIX, AWS_REGION
+    )
+    import boto3
+    
+    s3_client = boto3.client(
+        's3',
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+        region_name=AWS_REGION
+    )
+    
+    # Display emergency alerts if any exist
+    alert_count = create_emergency_alert_banner(
+        s3_client=s3_client,
+        bucket=MONITORING_S3_BUCKET,
+        prefix=MONITORING_S3_PREFIX
+    )
+    
+    if alert_count > 0:
+        st.markdown("---")
+except Exception as e:
+    # Silently skip if S3 not configured
+    pass
 
 # Sidebar configuration
 st.sidebar.header("Configuration")
@@ -53,12 +83,13 @@ st.success(f"✅ Loaded {len(df)} records from the last {days_back} days.")
 health_score = calculate_health_score(df)
 
 # Create tabs for different sections
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "🏥 Health Overview",
     "🚨 Crash Analysis", 
     "💾 Memory & Leaks",
     "⚡ Performance",
     "📊 System Diagnostics",
+    "📋 Data Quality",
     "🔍 Raw Data"
 ])
 
@@ -80,6 +111,9 @@ with tab5:
     create_system_diagnostics(df)
 
 with tab6:
+    create_data_completeness_check(df)
+
+with tab7:
     st.header("🔍 Raw Data Explorer")
     st.markdown("Complete monitoring data for technical analysis")
     
