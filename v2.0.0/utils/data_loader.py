@@ -604,10 +604,14 @@ def generate_error_report(merged_df: pd.DataFrame, raw_data: Dict[str, pd.DataFr
     return report.getvalue()
 
 @st.cache_data(ttl=300, show_spinner="Loading monitoring data...")
-def load_monitoring_data_from_s3(days_back=30) -> Optional[pd.DataFrame]:
+def load_monitoring_data_from_s3(days_back=30) -> Tuple[Optional[pd.DataFrame], List[Dict]]:
     """
     Load all monitoring parquet files from S3 (or local fallback) for the last N days.
-    Returns a single DataFrame with all monitoring data.
+    
+    Returns:
+        tuple: (combined_df, alert_events)
+            - combined_df: DataFrame with all monitoring metrics
+            - alert_events: List of dicts containing EMERGENCY/ALERT/BOOT events
     
     Note: If days_back is set very high (e.g., 9999), it loads ALL available data.
     """
@@ -615,6 +619,8 @@ def load_monitoring_data_from_s3(days_back=30) -> Optional[pd.DataFrame]:
         AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, MONITORING_S3_BUCKET, 
         MONITORING_S3_PREFIX, AWS_REGION
     )
+    
+    alert_events = []
     
     # Try S3 first
     try:
@@ -642,18 +648,32 @@ def load_monitoring_data_from_s3(days_back=30) -> Optional[pd.DataFrame]:
             
             for obj in response['Contents']:
                 key = obj['Key']
-                if key.endswith('.parquet'):
+                last_modified_utc = obj['LastModified'].replace(tzinfo=None)
+                
+                # Load parquet files
+                if key.endswith('.parquet') and last_modified_utc >= cutoff_date:
                     try:
-                        last_modified_utc = obj['LastModified'].replace(tzinfo=None)
-                        if last_modified_utc >= cutoff_date:
-                            reports_to_load.append({
-                                'key': key,
-                                'last_modified': last_modified_utc,
-                                'source': 's3'
-                            })
+                        reports_to_load.append({
+                            'key': key,
+                            'last_modified': last_modified_utc,
+                            'source': 's3'
+                        })
                     except Exception as e:
                         st.warning(f"Could not parse date for file {key}: {e}")
                         continue
+                
+                # Load alert JSON files (EMERGENCY, ALERT, BOOT)
+                if key.endswith('.json') and last_modified_utc >= cutoff_date:
+                    filename = key.split('/')[-1]
+                    if any(prefix in filename for prefix in ['EMERGENCY', 'ALERT', 'BOOT']):
+                        try:
+                            obj_data = s3_client.get_object(Bucket=MONITORING_S3_BUCKET, Key=key)
+                            alert_data = json.loads(obj_data['Body'].read())
+                            alert_data['_source_file'] = filename
+                            alert_data['_last_modified'] = last_modified_utc
+                            alert_events.append(alert_data)
+                        except Exception as e:
+                            st.warning(f"Could not load alert file {key}: {e}")
         
         # If S3 has no files, try local fallback
         if not reports_to_load:
@@ -676,8 +696,10 @@ def load_monitoring_data_from_s3(days_back=30) -> Optional[pd.DataFrame]:
                     st.info(f"✅ Found local monitoring reports at: {local_dir}")
                     
                     for filename in os.listdir(local_dir):
+                        filepath = os.path.join(local_dir, filename)
+                        
+                        # Load parquet files
                         if filename.endswith('.parquet') and filename.startswith('metrics_'):
-                            filepath = os.path.join(local_dir, filename)
                             # Extract date from filename: metrics_20251023_133111.parquet
                             try:
                                 date_str = filename.split('_')[1]  # "20251023"
@@ -691,6 +713,18 @@ def load_monitoring_data_from_s3(days_back=30) -> Optional[pd.DataFrame]:
                                     })
                             except Exception as e:
                                 st.warning(f"Could not parse date from {filename}: {e}")
+                        
+                        # Load alert JSON files
+                        if filename.endswith('.json'):
+                            if any(prefix in filename for prefix in ['EMERGENCY', 'ALERT', 'BOOT']):
+                                try:
+                                    with open(filepath, 'r') as f:
+                                        alert_data = json.load(f)
+                                    alert_data['_source_file'] = filename
+                                    alert_data['_last_modified'] = datetime.fromtimestamp(os.path.getmtime(filepath))
+                                    alert_events.append(alert_data)
+                                except Exception as e:
+                                    st.warning(f"Could not load alert file {filename}: {e}")
                     
                     break  # Stop searching after finding first valid directory
         
@@ -703,7 +737,7 @@ def load_monitoring_data_from_s3(days_back=30) -> Optional[pd.DataFrame]:
             - S3 upload hasn't run yet (check ENABLE_MONITORING_S3_UPLOAD in backend)
             - Local files not found in expected directory
             """)
-            return None
+            return None, alert_events
         
         # Sort by date (newest first) and show info
         reports_to_load.sort(key=lambda x: x['last_modified'], reverse=True)
@@ -715,6 +749,20 @@ def load_monitoring_data_from_s3(days_back=30) -> Optional[pd.DataFrame]:
         
         st.success(f"✅ Found {len(reports_to_load)} monitoring files ({source_counts['s3']} from S3, {source_counts['local']} local)")
         st.caption(f"📅 Date range: {oldest.strftime('%Y-%m-%d')} to {newest.strftime('%Y-%m-%d')}")
+        
+        # Warn about large file counts (minute-level uploads can create many files)
+        if len(reports_to_load) > 10000:
+            st.warning(f"⚠️ Loading {len(reports_to_load):,} files may be slow. Consider reducing the 'Days to show' slider for faster loading.")
+        
+        # Show alert events count if any
+        if alert_events:
+            alert_types = {}
+            for alert in alert_events:
+                event_type = alert.get('event_type', 'unknown')
+                alert_types[event_type] = alert_types.get(event_type, 0) + 1
+            
+            alert_summary = ', '.join([f"{count} {type_}" for type_, count in alert_types.items()])
+            st.info(f"🚨 Found {len(alert_events)} alert events: {alert_summary}")
         
         # Load all files
         dfs = []
@@ -733,7 +781,7 @@ def load_monitoring_data_from_s3(days_back=30) -> Optional[pd.DataFrame]:
         
         if not dfs:
             st.error("❌ Failed to load any monitoring data.")
-            return None
+            return None, alert_events
             
         # Combine all dataframes
         combined_df = pd.concat(dfs, ignore_index=True)
@@ -748,9 +796,9 @@ def load_monitoring_data_from_s3(days_back=30) -> Optional[pd.DataFrame]:
         # Show data summary
         st.caption(f"📊 Loaded {len(combined_df):,} monitoring records")
         
-        return combined_df
+        return combined_df, alert_events
 
     except Exception as e:
         st.error(f"❌ Error loading monitoring data: {str(e)}")
         st.exception(e)  # Show full traceback for debugging
-        return None
+        return None, []
