@@ -12,22 +12,34 @@ from sklearn.linear_model import LinearRegression
 from datetime import timedelta
 import json
 
+# Import memory configuration
+from config import TOTAL_MEMORY_MB, EMERGENCY_THRESHOLD_MB, EMERGENCY_THRESHOLD_PERCENT
+
 
 def calculate_health_score(df: pd.DataFrame) -> int:
     """
     Calculate a simple 0-100 health score that even a child can understand.
     
     Deductions:
-    - Crashes (5xx errors): -5 points each (max -50)
+    - Crashes (HTTP 5xx + system crashes): -5 points each (max -50)
     - High memory usage: -30 points if >80%, -15 if >60%
     - Slow responses: -20 points if >5s avg, -10 if >2s avg
     - Client errors (4xx): -2 points each (max -20)
     """
     score = 100
     
-    # Deduct for server errors (crashes)
-    crashes = len(df[df['status_code'] >= 500])
-    score -= min(crashes * 5, 50)
+    # Deduct for server errors (HTTP crashes)
+    http_crashes = len(df[df['status_code'] >= 500])
+    
+    # Deduct for system crashes (uptime resets)
+    system_crashes = 0
+    if 'system_uptime_seconds' in df.columns:
+        df_sorted = df.sort_values('timestamp').copy()
+        df_sorted['uptime_reset'] = df_sorted['system_uptime_seconds'].diff() < 0
+        system_crashes = len(df_sorted[df_sorted['uptime_reset']])
+    
+    total_crashes = http_crashes + system_crashes
+    score -= min(total_crashes * 5, 50)
     
     # Deduct for high memory usage
     if 'memory_percent' in df.columns:
@@ -77,18 +89,30 @@ def create_health_dashboard(df: pd.DataFrame, health_score: int):
             f"{len(df):,}",
             help="How many times people used the chatbot"
         )
+        
+        # Success rate (HTTP success only, system crashes happen outside HTTP)
+        http_success_count = len(df[df['status_code'] < 400])
+        http_success_rate = (http_success_count / len(df) * 100) if len(df) > 0 else 0
         st.metric(
             "Success Rate",
-            f"{(len(df[df['status_code'] < 400]) / len(df) * 100):.1f}%",
-            help="Percentage of requests that worked correctly"
+            f"{http_success_rate:.1f}%",
+            help=f"{http_success_count} successful HTTP requests out of {len(df)} total (excludes system crashes)"
         )
     
     with col3:
-        crashes = len(df[df['status_code'] >= 500])
+        # Count both HTTP crashes and system crashes
+        http_crashes = len(df[df['status_code'] >= 500])
+        system_crashes = 0
+        if 'system_uptime_seconds' in df.columns:
+            df_sorted = df.sort_values('timestamp').copy()
+            df_sorted['uptime_reset'] = df_sorted['system_uptime_seconds'].diff() < 0
+            system_crashes = len(df_sorted[df_sorted['uptime_reset']])
+        
+        total_crashes = http_crashes + system_crashes
         st.metric(
             "Crashes 🔴",
-            crashes,
-            help="Number of times the system completely failed"
+            total_crashes,
+            help=f"System failures: {system_crashes} system crashes + {http_crashes} HTTP errors"
         )
         warnings = len(df[(df['status_code'] >= 400) & (df['status_code'] < 500)])
         st.metric(
@@ -105,11 +129,21 @@ def create_health_dashboard(df: pd.DataFrame, health_score: int):
     
     with col1:
         avg_memory = df['memory_rss_mb'].mean()
-        memory_status = "🟢" if avg_memory < 500 else "🟡" if avg_memory < 800 else "🔴"
+        avg_memory_pct = (avg_memory / TOTAL_MEMORY_MB) * 100
+        
+        # Dynamic status based on percentage
+        if avg_memory_pct < 60:
+            memory_status = "�"
+        elif avg_memory_pct < 80:
+            memory_status = "🟡"
+        else:
+            memory_status = "🔴"
+        
         st.metric(
             f"{memory_status} Memory Used",
             f"{avg_memory:.0f} MB",
-            help="How much computer memory the chatbot is using. Lower is better!"
+            delta=f"{avg_memory_pct:.1f}% of {TOTAL_MEMORY_MB} MB",
+            help=f"How much computer memory the chatbot is using. {avg_memory_pct:.1f}% of available memory."
         )
     
     with col2:
@@ -146,55 +180,278 @@ def create_health_dashboard(df: pd.DataFrame, health_score: int):
             st.metric("Active Tasks", "N/A", help="Thread data not available")
 
 
+def create_event_timeline_section(df: pd.DataFrame):
+    """Create interactive event timeline section with search and filtering."""
+    st.markdown("### 📅 Event Timeline")
+    st.markdown("*Complete history of system events, crashes, and alerts*")
+    
+    from utils.alert_markers import create_event_timeline_data
+    
+    events = create_event_timeline_data(df)
+    
+    if not events:
+        st.success("✅ **No critical events detected** - System running smoothly!")
+        return
+    
+    # Summary metrics
+    col1, col2, col3, col4 = st.columns(4)
+    
+    critical_count = sum(1 for e in events if e['severity'] == 'critical')
+    error_count = sum(1 for e in events if e['severity'] == 'error')
+    warning_count = sum(1 for e in events if e['severity'] == 'warning')
+    info_count = sum(1 for e in events if e['severity'] == 'info')
+    
+    with col1:
+        st.metric("🔴 Critical Events", critical_count)
+    with col2:
+        st.metric("⚠️ Errors", error_count)
+    with col3:
+        st.metric("🟡 Warnings", warning_count)
+    with col4:
+        st.metric("🔵 Info", info_count)
+    
+    st.markdown("---")
+    
+    # Filters
+    col1, col2, col3 = st.columns([2, 2, 1])
+    
+    with col1:
+        # Severity filter
+        severity_options = ['All'] + sorted(list(set(e['severity'] for e in events)))
+        selected_severity = st.selectbox(
+            "Filter by Severity",
+            severity_options,
+            key="event_severity_filter"
+        )
+    
+    with col2:
+        # Search box
+        search_term = st.text_input(
+            "Search events",
+            placeholder="Search by label or details...",
+            key="event_search"
+        )
+    
+    with col3:
+        # Show count
+        show_count = st.number_input(
+            "Show events",
+            min_value=5,
+            max_value=len(events),
+            value=min(25, len(events)),
+            step=5,
+            key="event_count"
+        )
+    
+    # Apply filters
+    filtered_events = events
+    
+    if selected_severity != 'All':
+        filtered_events = [e for e in filtered_events if e['severity'] == selected_severity]
+    
+    if search_term:
+        search_lower = search_term.lower()
+        filtered_events = [
+            e for e in filtered_events 
+            if search_lower in e['label'].lower() or search_lower in e['details'].lower()
+        ]
+    
+    # Display filtered events
+    st.caption(f"Showing {min(show_count, len(filtered_events))} of {len(filtered_events)} events")
+    
+    if not filtered_events:
+        st.info("🔍 No events match your filters")
+        return
+    
+    # Display events in expandable sections
+    for event in filtered_events[:show_count]:
+        # Create a container with border color based on severity
+        with st.container():
+            # Add colored border using markdown
+            if event['severity'] == 'critical':
+                st.markdown("---")
+                st.markdown("🔴 **CRITICAL EVENT**")
+            elif event['severity'] == 'error':
+                st.markdown("---")
+                st.markdown("⚠️ **ERROR EVENT**")
+            elif event['severity'] == 'warning':
+                st.markdown("---")
+                st.markdown("🟡 **WARNING EVENT**")
+            else:
+                st.markdown("---")
+            
+            col1, col2 = st.columns([1, 11])
+            with col1:
+                st.markdown(f"## {event['icon']}")
+            with col2:
+                st.markdown(f"**{event['label']}**")
+                st.caption(f"🕒 {event['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}")
+                st.markdown(event['details'])
+    
+    st.markdown("---")
+
+
 def create_crash_analysis(df: pd.DataFrame):
     """Comprehensive crash analysis with child-friendly explanations."""
     st.header("🚨 Crash Analysis")
     st.markdown("*Understanding what went wrong and why*")
     
-    # Filter to server errors (crashes)
-    crashes = df[df['status_code'] >= 500].copy()
+    # Add Event Timeline at the top
+    create_event_timeline_section(df)
     
-    if crashes.empty:
+    st.markdown("---")
+    st.markdown("### 🔍 Detailed Crash Diagnosis")
+    
+    # Filter to server errors (HTTP crashes)
+    http_crashes = df[df['status_code'] >= 500].copy()
+    
+    # Detect uptime resets (system crashes/OOM kills)
+    system_crashes = 0
+    oom_kills = 0
+    if 'system_uptime_seconds' in df.columns:
+        df_sorted = df.sort_values('timestamp').copy()
+        df_sorted['uptime_reset'] = df_sorted['system_uptime_seconds'].diff() < 0
+        resets = df_sorted[df_sorted['uptime_reset']].copy()
+        system_crashes = len(resets)
+        
+        # Count OOM kills (memory >= 90% before reset)
+        for idx, reset_row in resets.iterrows():
+            before_reset = df_sorted[df_sorted['timestamp'] < reset_row['timestamp']].tail(5)
+            if not before_reset.empty:
+                avg_memory_before = before_reset['memory_rss_mb'].mean()
+                memory_percent_before = (avg_memory_before / TOTAL_MEMORY_MB) * 100
+                if memory_percent_before >= EMERGENCY_THRESHOLD_PERCENT:
+                    oom_kills += 1
+    
+    # Total crashes = HTTP errors + system crashes
+    total_crashes = len(http_crashes) + system_crashes
+    
+    if total_crashes == 0:
         st.success("🎉 **No crashes detected!** Your system is healthy.")
         
         # Show success metrics
         col1, col2 = st.columns(2)
         with col1:
-            st.metric("Days Without Crashes", f"{(df['timestamp'].max() - df['timestamp'].min()).days}")
+            # Calculate actual uptime (time span of monitoring data)
+            monitoring_span_days = (df['timestamp'].max() - df['timestamp'].min()).days
+            
+            # Check for any system restarts (uptime resets) even if not OOM
+            restarts_detected = 0
+            if 'system_uptime_seconds' in df.columns:
+                df_check = df.sort_values('timestamp').copy()
+                df_check['uptime_reset'] = df_check['system_uptime_seconds'].diff() < 0
+                restarts_detected = len(df_check[df_check['uptime_reset']])
+            
+            if restarts_detected > 0:
+                st.metric(
+                    "System Restarts Detected", 
+                    f"{restarts_detected}",
+                    help=f"System restarted {restarts_detected} time(s) in the last {monitoring_span_days} days (likely deployments, not crashes)"
+                )
+            else:
+                st.metric(
+                    "Days Without Crashes", 
+                    f"{monitoring_span_days}",
+                    help=f"No HTTP errors (5xx) or system crashes detected in {monitoring_span_days} days of monitoring"
+                )
         with col2:
-            st.metric("Success Rate", f"{(len(df) / len(df) * 100):.2f}%")
+            success_count = len(df[df['status_code'] < 400])
+            success_rate = (success_count / len(df) * 100) if len(df) > 0 else 100
+            st.metric(
+                "Success Rate", 
+                f"{success_rate:.1f}%",
+                help=f"{success_count} successful requests out of {len(df)} total"
+            )
         
         return
     
-    # Crash summary
-    st.error(f"### 🔴 Found {len(crashes)} crashes in the last {(df['timestamp'].max() - df['timestamp'].min()).days} days")
+    # Crash summary - show breakdown
+    st.error(f"### 🔴 Found {total_crashes} crashes in the last {(df['timestamp'].max() - df['timestamp'].min()).days} days")
+    
+    # Crash type breakdown
+    col_break1, col_break2, col_break3 = st.columns(3)
+    
+    with col_break1:
+        st.metric(
+            "🔴 System Crashes",
+            system_crashes,
+            help="Unexpected restarts (uptime resets)"
+        )
+    
+    with col_break2:
+        if oom_kills > 0:
+            st.metric(
+                "💥 OOM Kills",
+                oom_kills,
+                help="Out-of-Memory crashes (memory >= 90% before restart)"
+            )
+        else:
+            st.metric(
+                "💥 OOM Kills",
+                0,
+                help="No memory-related crashes detected"
+            )
+    
+    with col_break3:
+        st.metric(
+            "⚠️ HTTP Errors (5xx)",
+            len(http_crashes),
+            help="Application errors that returned 500+ status codes"
+        )
+    
+    st.markdown("---")
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
+        # Show last crash (either HTTP or system restart)
+        last_http = http_crashes['timestamp'].max() if not http_crashes.empty else None
+        last_reset = None
+        if system_crashes > 0 and 'system_uptime_seconds' in df.columns:
+            df_sorted = df.sort_values('timestamp').copy()
+            df_sorted['uptime_reset'] = df_sorted['system_uptime_seconds'].diff() < 0
+            resets = df_sorted[df_sorted['uptime_reset']]
+            last_reset = resets['timestamp'].max() if not resets.empty else None
+        
+        # Pick the most recent
+        if last_http and last_reset:
+            last_crash = max(last_http, last_reset)
+        elif last_http:
+            last_crash = last_http
+        elif last_reset:
+            last_crash = last_reset
+        else:
+            last_crash = df['timestamp'].min()
+        
         st.metric(
             "Last Crash",
-            crashes['timestamp'].max().strftime("%b %d, %I:%M %p"),
+            last_crash.strftime("%b %d, %I:%M %p"),
             help="When did the most recent crash happen?"
         )
     
     with col2:
-        if 'error_type' in crashes.columns:
-            most_common = crashes['error_type'].mode()[0] if len(crashes['error_type'].mode()) > 0 else "Unknown"
+        if oom_kills > 0:
+            st.metric(
+                "Most Common Problem",
+                "Out of Memory (OOM)",
+                help="Memory exhaustion causing crashes"
+            )
+        elif 'error_type' in http_crashes.columns and not http_crashes.empty:
+            most_common = http_crashes['error_type'].mode()[0] if len(http_crashes['error_type'].mode()) > 0 else "Unknown"
             st.metric(
                 "Most Common Problem",
                 most_common,
                 help="What type of error happens most often?"
             )
         else:
-            st.metric("Most Common Problem", "N/A")
+            st.metric("Most Common Problem", "Application Error")
     
     with col3:
-        crash_rate = (len(crashes) / len(df) * 100)
+        crash_rate = (total_crashes / (len(df) + system_crashes) * 100) if (len(df) + system_crashes) > 0 else 0
         st.metric(
-            "Crash Rate",
+            "Overall Crash Rate",
             f"{crash_rate:.2f}%",
-            help="Percentage of requests that crashed"
+            help="Percentage including both HTTP errors and system crashes"
         )
     
     st.markdown("---")
@@ -256,9 +513,9 @@ def create_crash_analysis(df: pd.DataFrame):
                 before_reset = df_sorted[df_sorted['timestamp'] < reset_row['timestamp']].tail(5)
                 if not before_reset.empty:
                     avg_memory_before = before_reset['memory_rss_mb'].mean()
-                    memory_percent_before = (avg_memory_before / 2048) * 100  # Assuming 2GB limit
+                    memory_percent_before = (avg_memory_before / TOTAL_MEMORY_MB) * 100
                     
-                    if memory_percent_before >= 90:
+                    if memory_percent_before >= EMERGENCY_THRESHOLD_PERCENT:
                         oom_likely.append({
                             'timestamp': reset_row['timestamp'],
                             'memory_mb': avg_memory_before,
@@ -283,7 +540,7 @@ def create_crash_analysis(df: pd.DataFrame):
                 with col1:
                     if oom_count > 0:
                         st.error(f"🔴 **{oom_count} OOMKilled**")
-                        st.caption("Memory >= 90% before restart")
+                        st.caption(f"Memory >= {EMERGENCY_THRESHOLD_PERCENT}% before restart")
                         st.markdown("**These crashes were likely caused by running out of memory!**")
                     else:
                         st.success("✅ **No OOMKilled crashes**")
@@ -292,7 +549,7 @@ def create_crash_analysis(df: pd.DataFrame):
                 with col2:
                     if graceful_count > 0:
                         st.info(f"🔵 **{graceful_count} Graceful**")
-                        st.caption("Memory < 90% before restart")
+                        st.caption(f"Memory < {EMERGENCY_THRESHOLD_PERCENT}% before restart")
                         st.markdown("**These were likely intentional restarts or deployments.**")
                 
                 # Show restart timeline with memory correlation
@@ -326,11 +583,12 @@ def create_crash_analysis(df: pd.DataFrame):
                 
                 # Add emergency threshold line
                 fig.add_hline(
-                    y=1843,
+                    y=EMERGENCY_THRESHOLD_MB,
                     line_dash="dash",
                     line_color="red",
-                    annotation_text="🔴 Emergency Threshold (90%)",
-                    annotation_position="right"
+                    annotation_text=f"🔴 Emergency Threshold ({EMERGENCY_THRESHOLD_PERCENT}%)",
+                    annotation_position="right",
+                    
                 )
                 
                 fig.update_layout(
@@ -346,147 +604,149 @@ def create_crash_analysis(df: pd.DataFrame):
     
     st.markdown("---")
     
-    # Timeline of crashes
-    st.markdown("### 📅 When Did Crashes Happen?")
-    
-    # Add crash indicator column
-    crashes_timeline = crashes.copy()
-    crashes_timeline['crash_severity'] = 'Server Error (5xx)'
-    
-    if 'crash_memory_rss_mb' in crashes_timeline.columns:
-        fig = px.scatter(
-            crashes_timeline,
-            x='timestamp',
-            y='crash_memory_rss_mb',
-            color='error_type' if 'error_type' in crashes_timeline.columns else 'status_code',
-            size='crash_memory_percent' if 'crash_memory_percent' in crashes_timeline.columns else None,
-            hover_data={
-                'endpoint': True,
-                'error_message' if 'error_message' in crashes_timeline.columns else 'error': True,
-                'crash_memory_rss_mb': ':.0f',
-                'crash_num_threads' if 'crash_num_threads' in crashes_timeline.columns else 'num_threads': True if 'crash_num_threads' in crashes_timeline.columns or 'num_threads' in crashes_timeline.columns else False
-            },
-            title="Crash Timeline - When and Why?"
-        )
-        fig.update_layout(
-            xaxis_title="Date & Time",
-            yaxis_title="Memory When Crashed (MB)",
-            hovermode='closest'
-        )
-    else:
-        fig = px.scatter(
-            crashes_timeline,
-            x='timestamp',
-            y='memory_rss_mb',
-            color='error_type' if 'error_type' in crashes_timeline.columns else 'status_code',
-            hover_data=['endpoint', 'error' if 'error' in crashes_timeline.columns else 'status_code'],
-            title="Crash Timeline"
-        )
-        fig.update_layout(xaxis_title="Date & Time", yaxis_title="Memory (MB)")
-    
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Error type breakdown
-    st.markdown("### 🔍 Why Did It Crash?")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if 'error_type' in crashes.columns and crashes['error_type'].notna().any():
-            st.markdown("**Error Types:**")
-            error_counts = crashes['error_type'].value_counts()
-            fig = px.bar(
-                x=error_counts.values,
-                y=error_counts.index,
-                orientation='h',
-                title="Most Common Error Types"
+    # Timeline of crashes (HTTP errors only if they exist)
+    if not http_crashes.empty:
+        st.markdown("### 📅 HTTP Error Timeline")
+        
+        # Add crash indicator column
+        crashes_timeline = http_crashes.copy()
+        crashes_timeline['crash_severity'] = 'Server Error (5xx)'
+        
+        if 'crash_memory_rss_mb' in crashes_timeline.columns:
+            fig = px.scatter(
+                crashes_timeline,
+                x='timestamp',
+                y='crash_memory_rss_mb',
+                color='error_type' if 'error_type' in crashes_timeline.columns else 'status_code',
+                size='crash_memory_percent' if 'crash_memory_percent' in crashes_timeline.columns else None,
+                hover_data={
+                    'endpoint': True,
+                    'error_message' if 'error_message' in crashes_timeline.columns else 'error': True,
+                    'crash_memory_rss_mb': ':.0f',
+                    'crash_num_threads' if 'crash_num_threads' in crashes_timeline.columns else 'num_threads': True if 'crash_num_threads' in crashes_timeline.columns or 'num_threads' in crashes_timeline.columns else False
+                },
+                title="HTTP Error Timeline - When and Why?"
             )
-            fig.update_layout(xaxis_title="Count", yaxis_title="Error Type")
-            st.plotly_chart(fig, use_container_width=True)
+            fig.update_layout(
+                xaxis_title="Date & Time",
+                yaxis_title="Memory When Error Occurred (MB)",
+                hovermode='closest'
+            )
         else:
-            st.info("No detailed error type information available")
-    
-    with col2:
-        st.markdown("**Which Pages Crash Most?**")
-        endpoint_crashes = crashes['endpoint'].value_counts().head(10)
-        fig = px.bar(
-            x=endpoint_crashes.values,
-            y=endpoint_crashes.index,
-            orientation='h',
-            title="Endpoints with Most Crashes"
-        )
-        fig.update_layout(xaxis_title="Number of Crashes", yaxis_title="API Endpoint")
+            fig = px.scatter(
+                crashes_timeline,
+                x='timestamp',
+                y='memory_rss_mb',
+                color='error_type' if 'error_type' in crashes_timeline.columns else 'status_code',
+                hover_data=['endpoint', 'error' if 'error' in crashes_timeline.columns else 'status_code'],
+                title="HTTP Error Timeline"
+            )
+            fig.update_layout(xaxis_title="Date & Time", yaxis_title="Memory (MB)")
+        
         st.plotly_chart(fig, use_container_width=True)
     
-    # Memory state during crashes
-    st.markdown("---")
-    st.markdown("### 💾 Memory State During Crashes")
-    
-    if 'crash_memory_rss_mb' in crashes.columns:
-        col1, col2, col3 = st.columns(3)
+    # Error type breakdown (HTTP errors only)
+    if not http_crashes.empty:
+        st.markdown("### 🔍 Why Did HTTP Errors Happen?")
+        
+        col1, col2 = st.columns(2)
         
         with col1:
-            avg_crash_memory = crashes['crash_memory_rss_mb'].mean()
-            st.metric(
-                "Avg Memory at Crash",
-                f"{avg_crash_memory:.0f} MB",
-                help="How much memory was used when crashes happened"
-            )
+            if 'error_type' in http_crashes.columns and http_crashes['error_type'].notna().any():
+                st.markdown("**Error Types:**")
+                error_counts = http_crashes['error_type'].value_counts()
+                fig = px.bar(
+                    x=error_counts.values,
+                    y=error_counts.index,
+                    orientation='h',
+                    title="Most Common Error Types"
+                )
+                fig.update_layout(xaxis_title="Count", yaxis_title="Error Type")
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("No detailed error type information available")
         
         with col2:
-            if 'crash_memory_percent' in crashes.columns:
-                avg_crash_pct = crashes['crash_memory_percent'].mean()
-                st.metric(
-                    "Avg Memory % at Crash",
-                    f"{avg_crash_pct:.1f}%",
-                    help="Percentage of total memory used"
-                )
+            st.markdown("**Which Pages Had Errors?**")
+            endpoint_crashes = http_crashes['endpoint'].value_counts().head(10)
+            fig = px.bar(
+                x=endpoint_crashes.values,
+                y=endpoint_crashes.index,
+                orientation='h',
+                title="Endpoints with Most HTTP Errors"
+            )
+            fig.update_layout(xaxis_title="Number of Errors", yaxis_title="API Endpoint")
+            st.plotly_chart(fig, use_container_width=True)
         
-        with col3:
-            if 'crash_num_threads' in crashes.columns:
-                avg_crash_threads = crashes['crash_num_threads'].mean()
-                st.metric(
-                    "Avg Threads at Crash",
-                    f"{avg_crash_threads:.0f}",
-                    help="Number of active tasks when crash occurred"
-                )
-    
-    # Detailed crash reports
-    st.markdown("---")
-    st.markdown("### 📝 Detailed Crash Reports")
-    st.markdown("*For developers and technical staff*")
-    
-    # Show most recent crashes
-    recent_crashes = crashes.sort_values('timestamp', ascending=False).head(10)
-    
-    for idx, row in recent_crashes.iterrows():
-        crash_time = row['timestamp'].strftime("%b %d, %Y %I:%M:%S %p")
-        error_type = row.get('error_type', 'Unknown Error')
+        # Memory state during HTTP crashes
+        st.markdown("---")
+        st.markdown("### 💾 Memory State During HTTP Errors")
         
-        with st.expander(f"🔴 Crash at {crash_time} - {error_type}"):
-            col1, col2 = st.columns(2)
+        if 'crash_memory_rss_mb' in http_crashes.columns:
+            col1, col2, col3 = st.columns(3)
             
             with col1:
-                st.markdown("**Request Details:**")
-                st.write(f"- **Endpoint:** `{row['endpoint']}`")
-                st.write(f"- **Method:** `{row['method']}`")
-                st.write(f"- **Status Code:** `{row['status_code']}`")
-                if 'error_message' in row:
-                    st.write(f"- **Error:** {row['error_message']}")
+                avg_crash_memory = http_crashes['crash_memory_rss_mb'].mean()
+                st.metric(
+                    "Avg Memory at Error",
+                    f"{avg_crash_memory:.0f} MB",
+                    help="How much memory was used when HTTP errors happened"
+                )
             
             with col2:
-                st.markdown("**System State:**")
-                if 'crash_memory_rss_mb' in row:
-                    st.write(f"- **Memory:** {row['crash_memory_rss_mb']:.0f} MB ({row.get('crash_memory_percent', 0):.1f}%)")
-                if 'crash_num_threads' in row:
-                    st.write(f"- **Active Threads:** {row['crash_num_threads']}")
-                if 'cpu_percent' in row:
-                    st.write(f"- **CPU Usage:** {row['cpu_percent']:.1f}%")
+                if 'crash_memory_percent' in http_crashes.columns:
+                    avg_crash_pct = http_crashes['crash_memory_percent'].mean()
+                    st.metric(
+                        "Avg Memory % at Error",
+                        f"{avg_crash_pct:.1f}%",
+                        help="Percentage of total memory used"
+                    )
             
-            # Show traceback if available
-            if 'traceback' in row and pd.notna(row['traceback']):
-                st.markdown("**Stack Trace:**")
-                st.code(row['traceback'], language='python')
+            with col3:
+                if 'crash_num_threads' in http_crashes.columns:
+                    avg_crash_threads = http_crashes['crash_num_threads'].mean()
+                    st.metric(
+                        "Avg Threads at Error",
+                        f"{avg_crash_threads:.0f}",
+                        help="Number of active tasks when error occurred"
+                    )
+        
+        # Detailed crash reports
+        st.markdown("---")
+        st.markdown("### 📝 Detailed HTTP Error Reports")
+        st.markdown("*For developers and technical staff*")
+        
+        # Show most recent crashes
+        recent_crashes = http_crashes.sort_values('timestamp', ascending=False).head(10)
+        
+        for idx, row in recent_crashes.iterrows():
+            crash_time = row['timestamp'].strftime("%b %d, %Y %I:%M:%S %p")
+            error_type = row.get('error_type', 'Unknown Error')
+            
+            with st.expander(f"🔴 HTTP Error at {crash_time} - {error_type}"):
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("**Request Details:**")
+                    st.write(f"- **Endpoint:** `{row['endpoint']}`")
+                    st.write(f"- **Method:** `{row['method']}`")
+                    st.write(f"- **Status Code:** `{row['status_code']}`")
+                    if 'error_message' in row:
+                        st.write(f"- **Error:** {row['error_message']}")
+                
+                with col2:
+                    st.markdown("**System State:**")
+                    if 'crash_memory_rss_mb' in row:
+                        st.write(f"- **Memory:** {row['crash_memory_rss_mb']:.0f} MB ({row.get('crash_memory_percent', 0):.1f}%)")
+                    if 'crash_num_threads' in row:
+                        st.write(f"- **Active Threads:** {row['crash_num_threads']}")
+                    if 'cpu_percent' in row:
+                        st.write(f"- **CPU Usage:** {row['cpu_percent']:.1f}%")
+                
+                # Show traceback if available
+                if 'traceback' in row and pd.notna(row['traceback']):
+                    st.markdown("**Stack Trace:**")
+                    st.code(row['traceback'], language='python')
 
 
 def create_memory_leak_detector(df: pd.DataFrame):
@@ -525,8 +785,7 @@ def create_memory_leak_detector(df: pd.DataFrame):
         slope_mb_per_hour = model.coef_[0] / 3600  # Convert per-second to per-hour
         is_growing = slope_mb_per_hour > 0.1  # Growing more than 0.1 MB/hour
         
-        # Calculate time until critical threshold (90% of 2048 MB = 1843 MB)
-        EMERGENCY_THRESHOLD_MB = 1843
+        # Calculate time until critical threshold
         current_avg = df_sorted['memory_rss_mb'].iloc[-100:].mean()
         
         hours_until_critical = None
@@ -543,11 +802,11 @@ def create_memory_leak_detector(df: pd.DataFrame):
             'model_score': model.score(X, y)
         }
     
-    # Compare first and last averages
-    first_100 = min(100, len(df_sorted) // 4)
-    last_100 = min(100, len(df_sorted) // 4)
-    
-    if len(df_sorted) > 200:
+    # Compare first and last averages (need at least 20 data points for meaningful analysis)
+    if len(df_sorted) > 20:
+        first_100 = min(100, len(df_sorted) // 4)
+        last_100 = min(100, len(df_sorted) // 4)
+        
         first_avg = df_sorted['memory_trend'].iloc[:first_100].mean()
         last_avg = df_sorted['memory_trend'].iloc[-last_100:].mean()
         memory_growth = ((last_avg - first_avg) / first_avg * 100) if first_avg > 0 else 0
@@ -562,9 +821,15 @@ def create_memory_leak_detector(df: pd.DataFrame):
             elif memory_growth > 10:
                 st.warning("⚠️ **Possible Memory Leak**")
                 st.markdown(f"Memory grew by **{memory_growth:.1f}%** - monitor closely")
+            elif memory_growth < -10:
+                st.success("✅ **Memory Decreasing!**")
+                st.markdown(f"Memory dropped by **{abs(memory_growth):.1f}%** - excellent!")
+            elif memory_growth < 0:
+                st.success("✅ **Memory Stable/Decreasing**")
+                st.markdown(f"Memory change: **{memory_growth:+.1f}%** - healthy")
             else:
                 st.success("✅ **No Memory Leak Detected**")
-                st.markdown("Memory usage is stable")
+                st.markdown(f"Memory growth: **{memory_growth:+.1f}%** - normal")
         
         with col2:
             st.metric(
@@ -577,8 +842,9 @@ def create_memory_leak_detector(df: pd.DataFrame):
             st.metric(
                 "Current Memory",
                 f"{last_avg:.0f} MB",
-                delta=f"{last_avg - first_avg:+.0f} MB",
-                help="Average memory at the end of the period"
+                delta=f"{last_avg - first_avg:+.0f} MB ({memory_growth:+.1f}%)",
+                delta_color="inverse",
+                help="Average memory now vs. start - lower is better"
             )
         
         with col4:
@@ -598,8 +864,18 @@ def create_memory_leak_detector(df: pd.DataFrame):
                     st.success("✅ **Safe**")
                     st.caption("Below critical threshold")
             else:
-                st.success("📊 **Stable**")
-                st.caption("No growth detected")
+                # Memory is stable or decreasing (good!)
+                if memory_growth < -5:
+                    st.success("📉 **Decreasing**")
+                    st.caption("Memory usage improving")
+                elif memory_growth < 5:
+                    st.success("📊 **Stable**")
+                    st.caption("Memory steady")
+                else:
+                    st.info("📈 **Minor Growth**")
+                    st.caption("Increasing but safe")
+    else:
+        st.info(f"📊 Need at least 20 data points for memory leak analysis. Currently have {len(df_sorted)} records.")
     
     # Memory trend chart
     st.markdown("### 📈 Memory Usage Over Time")
@@ -661,12 +937,16 @@ def create_memory_leak_detector(df: pd.DataFrame):
     
     # Add emergency threshold line
     fig.add_hline(
-        y=1843,
+        y=EMERGENCY_THRESHOLD_MB,
         line_dash="dash",
         line_color="red",
-        annotation_text="🔴 Emergency Threshold (90%)",
-        annotation_position="right"
+        annotation_text=f"🔴 Emergency Threshold ({EMERGENCY_THRESHOLD_PERCENT}%)",
+        annotation_position="right",
     )
+    
+    # Add alert markers (Render-style)
+    from utils.alert_markers import add_alert_markers_to_chart
+    fig = add_alert_markers_to_chart(fig, df_sorted, y_column='memory_rss_mb')
     
     fig.update_layout(
         xaxis_title="Time",
@@ -1156,11 +1436,20 @@ def create_data_completeness_check(df: pd.DataFrame):
                 'severity': severity
             })
     
-    # Calculate health score
+    # Calculate health score (improved for minute-level data)
     data_points = len(df_sorted)
     avg_per_hour = data_points / max(expected_hours, 1)
-    gap_penalty = len([g for g in gaps if g['severity'] in ['warning', 'critical']]) * 5
-    completeness_score = max(0, min(100, 100 - gap_penalty))
+    
+    # Calculate coverage percentage (what % of time has data)
+    hours_with_data = len(hourly_counts)
+    coverage_pct = (hours_with_data / max(expected_hours, 1)) * 100
+    
+    # Penalize only significant gaps (>6 hours)
+    critical_gaps = len([g for g in gaps if g['severity'] == 'critical'])
+    gap_penalty = critical_gaps * 10  # Only penalize critical gaps
+    
+    # Score based on coverage minus penalties
+    completeness_score = max(0, min(100, coverage_pct - gap_penalty))
     
     # Display health score
     col1, col2, col3, col4 = st.columns(4)
@@ -1200,6 +1489,15 @@ def create_data_completeness_check(df: pd.DataFrame):
     # Show gaps if any exist
     if gaps:
         st.markdown("---")
+        
+        # Add context for minute-level uploads
+        if avg_per_hour > 30:  # More than 30 records/hour suggests minute-level data
+            st.info("""
+            💡 **Note about minute-level uploads:** Your backend uploads data every minute. 
+            Gaps are normal when the backend is offline (deployments, restarts, maintenance). 
+            Only **critical gaps (>6 hours)** indicate potential issues.
+            """)
+        
         st.markdown("### ⚠️ Detected Data Gaps")
         
         gaps_df = pd.DataFrame(gaps)

@@ -69,15 +69,60 @@ load_all = st.sidebar.checkbox("Load ALL available data", value=False, help="Ign
 if load_all:
     days_back = 9999  # Special value to load everything
 
+# Timezone selector
+st.sidebar.markdown("---")
+st.sidebar.subheader("🌍 Timezone")
+timezone_option = st.sidebar.radio(
+    "Display timestamps in:",
+    options=["PST", "UTC", "Browser"],
+    index=0,
+    help="PST: Pacific Standard Time\nUTC: Coordinated Universal Time\nBrowser: Your local timezone"
+)
+
+# Store timezone preference in session state
+if 'timezone_preference' not in st.session_state or st.session_state.timezone_preference != timezone_option:
+    st.session_state.timezone_preference = timezone_option
+
+st.sidebar.markdown("---")
+
 # Load data
 with st.spinner("Loading monitoring data from S3..."):
-    df = load_monitoring_data_from_s3(days_back)
+    df, alert_events = load_monitoring_data_from_s3(days_back)
 
 if df is None or df.empty:
     st.warning("No monitoring data found for the selected period.")
     st.stop()
 
-st.success(f"✅ Loaded {len(df)} records from the last {days_back} days.")
+# Convert timestamps to selected timezone
+if 'timestamp' in df.columns:
+    from utils.timezone_utils import convert_series_to_timezone, get_timezone_label
+    df['timestamp'] = convert_series_to_timezone(df['timestamp'], st.session_state.timezone_preference)
+    timezone_label = get_timezone_label(st.session_state.timezone_preference)
+    st.success(f"✅ Loaded {len(df)} records from the last {days_back} days. Timestamps shown in **{timezone_label}**.")
+else:
+    st.success(f"✅ Loaded {len(df)} records from the last {days_back} days.")
+
+# Display emergency alerts banner
+if alert_events:
+    emergency_alerts = [a for a in alert_events if a.get('event_type') in ['alert', 'emergency']]
+    crash_boots = [a for a in alert_events if a.get('event_type') == 'boot' and a.get('restart_type') == 'crash_recovery']
+    
+    if emergency_alerts or crash_boots:
+        st.error(f"🚨 **{len(emergency_alerts + crash_boots)} Critical Events Detected!**")
+        
+        # Show details in expanders
+        for alert in sorted(emergency_alerts + crash_boots, key=lambda x: x.get('timestamp', ''), reverse=True)[:5]:
+            timestamp = alert.get('timestamp', 'Unknown time')
+            message = alert.get('message', 'Alert')
+            severity = alert.get('severity', 'warning')
+            
+            severity_icon = '🔴' if severity == 'critical' else '⚠️' if severity == 'error' else '🟡'
+            
+            with st.expander(f"{severity_icon} {message} - {timestamp}"):
+                st.json(alert)
+
+# Event Timeline moved to Crash Analysis tab for better interactivity
+# (includes search, filtering, and full event history)
 
 # Calculate health score
 health_score = calculate_health_score(df)

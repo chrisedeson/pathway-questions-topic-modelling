@@ -43,6 +43,16 @@ AWS_REGION = "us-east-1"
 MONITORING_S3_BUCKET = get_config("MONITORING_S3_BUCKET", "byupathway-public")
 MONITORING_S3_PREFIX = get_config("MONITORING_S3_PREFIX", "pathway-chatbot-backend-monitoring")
 
+# ============ Memory Configuration ============
+# Total system memory in MB (configurable via environment variable)
+TOTAL_MEMORY_MB = int(get_config("TOTAL_MEMORY_MB", "2048"))  # Default 2GB (matches actual server memory)
+
+# Emergency threshold percentage (when system is at risk)
+EMERGENCY_THRESHOLD_PERCENT = int(get_config("EMERGENCY_THRESHOLD_PERCENT", "90"))  # Default 90%
+
+# Calculate emergency threshold in MB
+EMERGENCY_THRESHOLD_MB = int((TOTAL_MEMORY_MB * EMERGENCY_THRESHOLD_PERCENT) / 100)  # 90% of 2048 = 1843 MB
+
 
 # ============ File Naming Patterns ============
 # The notebook outputs these files with timestamp suffixes
