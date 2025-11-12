@@ -767,7 +767,7 @@ def create_crash_analysis(df: pd.DataFrame, alert_events: list = None):
                     st.code(row['traceback'], language='python')
 
 
-def create_memory_leak_detector(df: pd.DataFrame):
+def create_memory_leak_detector(df: pd.DataFrame, alert_events: list = None):
     """Detect potential memory leaks with trend analysis and predictions."""
     st.header("💾 Memory Usage & Leak Detection")
     st.markdown("*Is memory growing over time?*")
@@ -900,15 +900,37 @@ def create_memory_leak_detector(df: pd.DataFrame):
     
     fig = go.Figure()
     
-    # Actual memory usage
+    # Actual memory usage from HTTP requests
     fig.add_trace(go.Scatter(
         x=df_sorted['timestamp'],
         y=df_sorted['memory_rss_mb'],
         mode='markers',
-        name='Actual Memory',
+        name='HTTP Request Memory',
         marker=dict(size=3, color='lightblue', opacity=0.5),
         hovertemplate='<b>%{x}</b><br>Memory: %{y:.0f} MB<extra></extra>'
     ))
+    
+    # Add heartbeat memory data if available
+    if alert_events:
+        heartbeats = [e for e in alert_events if e.get('event_type') == 'heartbeat' or e.get('type') == 'heartbeat']
+        if heartbeats:
+            hb_data = []
+            for hb in heartbeats:
+                hb_data.append({
+                    'timestamp': pd.to_datetime(hb.get('timestamp') or hb.get('_last_modified')),
+                    'memory_rss_mb': hb.get('memory_rss_mb', 0)
+                })
+            df_hb = pd.DataFrame(hb_data).sort_values('timestamp')
+            
+            # Add heartbeat memory points
+            fig.add_trace(go.Scatter(
+                x=df_hb['timestamp'],
+                y=df_hb['memory_rss_mb'],
+                mode='markers',
+                name='Idle Memory (Heartbeats)',
+                marker=dict(size=8, color='green', symbol='diamond', opacity=0.8),
+                hovertemplate='<b>💓 Heartbeat</b><br>%{x}<br>Idle Memory: %{y:.0f} MB<extra></extra>'
+            ))
     
     # Trend line (rolling average)
     fig.add_trace(go.Scatter(
@@ -1201,7 +1223,7 @@ def create_time_series_charts(df: pd.DataFrame):
                     st.write(f"- `{endpoint}`: {count} errors")
 
 
-def create_system_diagnostics(df: pd.DataFrame):
+def create_system_diagnostics(df: pd.DataFrame, alert_events: list = None):
     """Display detailed system diagnostics."""
     st.header("🖥️ System Diagnostics")
     st.markdown("*Detailed CPU, memory, and thread analysis*")
@@ -1214,11 +1236,12 @@ def create_system_diagnostics(df: pd.DataFrame):
             
             fig = go.Figure()
             
+            # HTTP request CPU usage
             fig.add_trace(go.Scatter(
                 x=df['timestamp'],
                 y=df['cpu_percent'],
                 mode='lines',
-                name='Process CPU %',
+                name='Process CPU % (HTTP)',
                 line=dict(color='blue')
             ))
             
@@ -1227,9 +1250,42 @@ def create_system_diagnostics(df: pd.DataFrame):
                     x=df['timestamp'],
                     y=df['system_cpu_percent'],
                     mode='lines',
-                    name='System CPU %',
+                    name='System CPU % (HTTP)',
                     line=dict(color='orange', dash='dash')
                 ))
+            
+            # Add heartbeat CPU data if available
+            if alert_events:
+                heartbeats = [e for e in alert_events if e.get('event_type') == 'heartbeat' or e.get('type') == 'heartbeat']
+                if heartbeats:
+                    hb_data = []
+                    for hb in heartbeats:
+                        hb_data.append({
+                            'timestamp': pd.to_datetime(hb.get('timestamp') or hb.get('_last_modified')),
+                            'cpu_percent': hb.get('cpu_percent', 0),
+                            'system_cpu_percent': hb.get('system_cpu_percent', 0)
+                        })
+                    df_hb = pd.DataFrame(hb_data).sort_values('timestamp')
+                    
+                    # Add heartbeat CPU points
+                    fig.add_trace(go.Scatter(
+                        x=df_hb['timestamp'],
+                        y=df_hb['cpu_percent'],
+                        mode='markers',
+                        name='Process CPU % (Idle)',
+                        marker=dict(size=8, color='lightgreen', symbol='diamond'),
+                        hovertemplate='<b>💓 Idle</b><br>%{x}<br>CPU: %{y:.1f}%<extra></extra>'
+                    ))
+                    
+                    if df_hb['system_cpu_percent'].notna().any():
+                        fig.add_trace(go.Scatter(
+                            x=df_hb['timestamp'],
+                            y=df_hb['system_cpu_percent'],
+                            mode='markers',
+                            name='System CPU % (Idle)',
+                            marker=dict(size=8, color='lightyellow', symbol='diamond'),
+                            hovertemplate='<b>💓 Idle</b><br>%{x}<br>System CPU: %{y:.1f}%<extra></extra>'
+                        ))
             
             # Add danger zone
             fig.add_hline(
@@ -1264,12 +1320,38 @@ def create_system_diagnostics(df: pd.DataFrame):
         if 'num_threads' in df.columns:
             st.subheader("🧵 Thread Count Analysis")
             
-            fig = px.line(
-                df,
-                x='timestamp',
-                y='num_threads',
-                title='Active Threads Over Time'
-            )
+            fig = go.Figure()
+            
+            # HTTP request threads
+            fig.add_trace(go.Scatter(
+                x=df['timestamp'],
+                y=df['num_threads'],
+                mode='lines',
+                name='Threads (HTTP)',
+                line=dict(color='purple')
+            ))
+            
+            # Add heartbeat thread data if available
+            if alert_events:
+                heartbeats = [e for e in alert_events if e.get('event_type') == 'heartbeat' or e.get('type') == 'heartbeat']
+                if heartbeats:
+                    hb_data = []
+                    for hb in heartbeats:
+                        hb_data.append({
+                            'timestamp': pd.to_datetime(hb.get('timestamp') or hb.get('_last_modified')),
+                            'num_threads': hb.get('num_threads', 0)
+                        })
+                    df_hb = pd.DataFrame(hb_data).sort_values('timestamp')
+                    
+                    # Add heartbeat thread points
+                    fig.add_trace(go.Scatter(
+                        x=df_hb['timestamp'],
+                        y=df_hb['num_threads'],
+                        mode='markers',
+                        name='Threads (Idle)',
+                        marker=dict(size=8, color='lightblue', symbol='diamond'),
+                        hovertemplate='<b>💓 Idle</b><br>%{x}<br>Threads: %{y}<extra></extra>'
+                    ))
             
             # Add warning line
             fig.add_hline(
@@ -1278,6 +1360,13 @@ def create_system_diagnostics(df: pd.DataFrame):
                 line_color="orange",
                 annotation_text="⚠️ High Thread Count",
                 annotation_position="right"
+            )
+            
+            fig.update_layout(
+                xaxis_title="Time",
+                yaxis_title="Thread Count",
+                hovermode='x unified',
+                title="Active Threads Over Time"
             )
             
             st.plotly_chart(fig, use_container_width=True)

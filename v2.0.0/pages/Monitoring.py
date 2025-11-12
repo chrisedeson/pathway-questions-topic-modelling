@@ -168,7 +168,7 @@ with tab2:
     create_crash_analysis(df, alert_events)
 
 with tab3:
-    create_memory_leak_detector(df)
+    create_memory_leak_detector(df, alert_events)
     st.markdown("---")
     create_summary_metrics(df)
 
@@ -176,7 +176,7 @@ with tab4:
     create_time_series_charts(df)
 
 with tab5:
-    create_system_diagnostics(df)
+    create_system_diagnostics(df, alert_events)
 
 with tab6:
     st.header("📋 Data Quality Checks")
