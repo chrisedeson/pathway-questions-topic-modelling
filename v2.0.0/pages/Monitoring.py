@@ -20,7 +20,8 @@ from utils.monitoring_visualizations import (
     create_time_series_charts,
     create_system_diagnostics,
     create_data_completeness_check,
-    create_emergency_alert_banner
+    create_emergency_alert_banner,
+    create_heartbeat_timeline
 )
 
 st.set_page_config(
@@ -104,8 +105,19 @@ else:
 
 # Display emergency alerts banner
 if alert_events:
+    # Categorize all alert events
     emergency_alerts = [a for a in alert_events if a.get('event_type') in ['alert', 'emergency']]
     crash_boots = [a for a in alert_events if a.get('event_type') == 'boot' and a.get('restart_type') == 'crash_recovery']
+    normal_boots = [a for a in alert_events if a.get('event_type') == 'boot' and a.get('restart_type') == 'clean_start']
+    heartbeats = [a for a in alert_events if a.get('event_type') == 'heartbeat' or a.get('type') == 'heartbeat']
+    
+    # Show summary with breakdown
+    total_events = len(alert_events)
+    st.info(f"📋 **Found {total_events} alert events:** "
+            f"{len(crash_boots)} crash recovery boots, "
+            f"{len(normal_boots)} normal boots, "
+            f"{len(emergency_alerts)} alerts/emergencies, "
+            f"{len(heartbeats)} heartbeats")
     
     if emergency_alerts or crash_boots:
         st.error(f"🚨 **{len(emergency_alerts + crash_boots)} Critical Events Detected!**")
@@ -120,6 +132,17 @@ if alert_events:
             
             with st.expander(f"{severity_icon} {message} - {timestamp}"):
                 st.json(alert)
+        
+        st.markdown("---")
+    
+    # Show normal boots in an info section (not critical)
+    if normal_boots:
+        with st.expander(f"ℹ️ Normal System Boots ({len(normal_boots)}) - Click to view"):
+            st.info("These are normal deployments or restarts (not crashes)")
+            for boot in sorted(normal_boots, key=lambda x: x.get('timestamp', ''), reverse=True)[:10]:
+                timestamp = boot.get('timestamp', 'Unknown time')
+                files_found = boot.get('unsaved_files_found', 0)
+                st.markdown(f"- 🔵 **{timestamp}** - Clean start ({files_found} leftover files)")
 
 # Event Timeline moved to Crash Analysis tab for better interactivity
 # (includes search, filtering, and full event history)
@@ -142,7 +165,7 @@ with tab1:
     create_health_dashboard(df, health_score)
 
 with tab2:
-    create_crash_analysis(df)
+    create_crash_analysis(df, alert_events)
 
 with tab3:
     create_memory_leak_detector(df)
@@ -156,7 +179,20 @@ with tab5:
     create_system_diagnostics(df)
 
 with tab6:
-    create_data_completeness_check(df)
+    st.header("📋 Data Quality Checks")
+    st.markdown("*Monitoring data completeness and service health validation*")
+    
+    # Create mini-tabs for different quality checks
+    quality_tab1, quality_tab2 = st.tabs([
+        "📊 Data Completeness",
+        "💓 Heartbeat Monitoring"
+    ])
+    
+    with quality_tab1:
+        create_data_completeness_check(df)
+    
+    with quality_tab2:
+        create_heartbeat_timeline(alert_events)
 
 with tab7:
     st.header("🔍 Raw Data Explorer")

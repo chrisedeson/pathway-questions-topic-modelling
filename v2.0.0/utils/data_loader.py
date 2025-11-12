@@ -662,10 +662,10 @@ def load_monitoring_data_from_s3(days_back=30) -> Tuple[Optional[pd.DataFrame], 
                         st.warning(f"Could not parse date for file {key}: {e}")
                         continue
                 
-                # Load alert JSON files (EMERGENCY, ALERT, BOOT)
+                # Load alert JSON files (EMERGENCY, ALERT, BOOT, HEARTBEAT)
                 if key.endswith('.json') and last_modified_utc >= cutoff_date:
                     filename = key.split('/')[-1]
-                    if any(prefix in filename for prefix in ['EMERGENCY', 'ALERT', 'BOOT']):
+                    if any(prefix in filename for prefix in ['EMERGENCY', 'ALERT', 'BOOT', 'HEARTBEAT']):
                         try:
                             obj_data = s3_client.get_object(Bucket=MONITORING_S3_BUCKET, Key=key)
                             alert_data = json.loads(obj_data['Body'].read())
@@ -716,7 +716,7 @@ def load_monitoring_data_from_s3(days_back=30) -> Tuple[Optional[pd.DataFrame], 
                         
                         # Load alert JSON files
                         if filename.endswith('.json'):
-                            if any(prefix in filename for prefix in ['EMERGENCY', 'ALERT', 'BOOT']):
+                            if any(prefix in filename for prefix in ['EMERGENCY', 'ALERT', 'BOOT', 'HEARTBEAT']):
                                 try:
                                     with open(filepath, 'r') as f:
                                         alert_data = json.load(f)

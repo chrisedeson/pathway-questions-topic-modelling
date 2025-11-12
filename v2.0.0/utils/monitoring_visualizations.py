@@ -233,13 +233,14 @@ def create_event_timeline_section(df: pd.DataFrame):
         )
     
     with col3:
-        # Show count
+        # Show count - adjust min_value based on available events
+        min_show = min(5, len(events))  # Use 5 or fewer if there are fewer events
         show_count = st.number_input(
             "Show events",
-            min_value=5,
+            min_value=min_show,
             max_value=len(events),
             value=min(25, len(events)),
-            step=5,
+            step=min_show,  # Step by min_show to avoid issues
             key="event_count"
         )
     
@@ -291,7 +292,7 @@ def create_event_timeline_section(df: pd.DataFrame):
     st.markdown("---")
 
 
-def create_crash_analysis(df: pd.DataFrame):
+def create_crash_analysis(df: pd.DataFrame, alert_events: list = None):
     """Comprehensive crash analysis with child-friendly explanations."""
     st.header("🚨 Crash Analysis")
     st.markdown("*Understanding what went wrong and why*")
@@ -305,14 +306,22 @@ def create_crash_analysis(df: pd.DataFrame):
     # Filter to server errors (HTTP crashes)
     http_crashes = df[df['status_code'] >= 500].copy()
     
-    # Detect uptime resets (system crashes/OOM kills)
-    system_crashes = 0
+    # Count BOOT events from alert_events (this is the REAL crash detection!)
+    boot_crashes = 0
+    if alert_events:
+        # Only count crash_recovery boots as crashes (not clean_start deployments)
+        boot_crashes = sum(1 for a in alert_events 
+                          if a.get('event_type') == 'boot' 
+                          and a.get('restart_type') == 'crash_recovery')
+    
+    # Detect uptime resets (system crashes/OOM kills) - LEGACY METHOD, may miss crashes
+    system_crashes_from_http = 0
     oom_kills = 0
     if 'system_uptime_seconds' in df.columns:
         df_sorted = df.sort_values('timestamp').copy()
         df_sorted['uptime_reset'] = df_sorted['system_uptime_seconds'].diff() < 0
         resets = df_sorted[df_sorted['uptime_reset']].copy()
-        system_crashes = len(resets)
+        system_crashes_from_http = len(resets)
         
         # Count OOM kills (memory >= 90% before reset)
         for idx, reset_row in resets.iterrows():
@@ -323,8 +332,17 @@ def create_crash_analysis(df: pd.DataFrame):
                 if memory_percent_before >= EMERGENCY_THRESHOLD_PERCENT:
                     oom_kills += 1
     
-    # Total crashes = HTTP errors + system crashes
-    total_crashes = len(http_crashes) + system_crashes
+    # Total crashes = HTTP errors + boot crashes + system crashes detected in HTTP data
+    # NOTE: boot_crashes is the MOST RELIABLE source (from BOOT event files)
+    # system_crashes_from_http may miss crashes if no HTTP requests happened before/after
+    total_crashes = len(http_crashes) + boot_crashes + system_crashes_from_http
+    
+    # Use boot crashes as the primary count (most accurate)
+    system_crashes = boot_crashes if boot_crashes > 0 else system_crashes_from_http
+    
+    # Show warning if boot crashes != system crashes from HTTP (indicates missed detections)
+    if boot_crashes > 0 and system_crashes_from_http == 0:
+        st.warning(f"⚠️ **Detection Note:** {boot_crashes} crash(es) detected from BOOT events, but 0 detected from HTTP request data. This means the service crashed when idle (no HTTP traffic). BOOT events are the authoritative crash count.")
     
     if total_crashes == 0:
         st.success("🎉 **No crashes detected!** Your system is healthy.")
@@ -902,29 +920,6 @@ def create_memory_leak_detector(df: pd.DataFrame):
         hovertemplate='<b>%{x}</b><br>Trend: %{y:.0f} MB<extra></extra>'
     ))
     
-    # Linear regression prediction line
-    if prediction_result:
-        fig.add_trace(go.Scatter(
-            x=df_sorted['timestamp'],
-            y=df_sorted['memory_predicted'],
-            mode='lines',
-            name='Linear Prediction',
-            line=dict(color='red', width=2, dash='dash'),
-            hovertemplate='<b>%{x}</b><br>Predicted: %{y:.0f} MB<extra></extra>'
-        ))
-        
-        # Add slope annotation
-        slope_text = f"Growth Rate: {prediction_result['slope_mb_per_hour']:.2f} MB/hour"
-        fig.add_annotation(
-            text=slope_text,
-            xref="paper", yref="paper",
-            x=0.02, y=0.98,
-            showarrow=False,
-            bgcolor="rgba(255,255,255,0.8)",
-            bordercolor="red",
-            borderwidth=1
-        )
-    
     # Add warning zone if memory is high
     if df_sorted['memory_rss_mb'].max() > 800:
         fig.add_hline(
@@ -934,15 +929,6 @@ def create_memory_leak_detector(df: pd.DataFrame):
             annotation_text="⚠️ High Memory Zone",
             annotation_position="right"
         )
-    
-    # Add emergency threshold line
-    fig.add_hline(
-        y=EMERGENCY_THRESHOLD_MB,
-        line_dash="dash",
-        line_color="red",
-        annotation_text=f"🔴 Emergency Threshold ({EMERGENCY_THRESHOLD_PERCENT}%)",
-        annotation_position="right",
-    )
     
     # Add alert markers (Render-style)
     from utils.alert_markers import add_alert_markers_to_chart
@@ -1095,11 +1081,20 @@ def create_time_series_charts(df: pd.DataFrame):
             else '🔴 Server Error (5xx)'
         )
         
+        # Define custom color palette with better contrast
+        color_map = {
+            '🟢 Success (2xx)': '#22c55e',      # Bright green
+            '🔵 Redirect (3xx)': '#3b82f6',     # Bright blue
+            '🟡 Client Error (4xx)': '#f59e0b', # Bright orange/amber
+            '🔴 Server Error (5xx)': '#ef4444'  # Bright red
+        }
+        
         fig = px.scatter(
             df_with_status,
             x='timestamp',
             y='duration_seconds',
             color='status_category',
+            color_discrete_map=color_map,
             title='Response Time by Request Status',
             labels={'duration_seconds': 'Response Time (seconds)'},
             hover_data=['endpoint', 'method']
@@ -1695,3 +1690,376 @@ def create_emergency_alert_banner(s3_client=None, bucket: Optional[str] = None, 
     except Exception as e:
         # Don't show errors if S3 not accessible (might be intentional)
         return 0
+
+
+def create_heartbeat_timeline(alert_events: list = None):
+    """
+    Create a comprehensive heartbeat timeline visualization.
+    Shows service health during idle periods when no HTTP traffic is happening.
+    """
+    st.header("💓 Heartbeat Monitoring")
+    st.markdown("*Service health during idle periods (no HTTP traffic)*")
+    
+    if not alert_events:
+        st.info("📊 No heartbeat data available. Heartbeats track service health when idle.")
+        return
+    
+    # Filter to heartbeat events - check both 'event_type' and 'type' fields
+    heartbeats = [e for e in alert_events if e.get('event_type') == 'heartbeat' or e.get('type') == 'heartbeat']
+    
+    if not heartbeats:
+        st.warning("⚠️ No heartbeat events found in the monitoring data.")
+        st.info("""
+        **💡 About Heartbeats:**
+        - Heartbeats are sent every 5 minutes when the service is idle (no HTTP requests)
+        - They help detect if the service is down during quiet periods
+        - If heartbeats stop appearing, the service may have crashed
+        """)
+        return
+    
+    # Convert to DataFrame for easier analysis
+    heartbeat_data = []
+    for hb in heartbeats:
+        heartbeat_data.append({
+            'timestamp': pd.to_datetime(hb.get('timestamp') or hb.get('_last_modified')),
+            'status': hb.get('status', 'unknown'),
+            'message': hb.get('message', ''),
+            'memory_rss_mb': hb.get('memory_rss_mb', 0),
+            'memory_percent': hb.get('memory_percent', 0),
+            'cpu_percent': hb.get('cpu_percent', 0),
+            'system_cpu_percent': hb.get('system_cpu_percent', 0),
+            'num_threads': hb.get('num_threads', 0),
+            'num_connections': hb.get('num_connections', 0),
+            'system_memory_percent': hb.get('system_memory_percent', 0),
+            'uptime_seconds': hb.get('uptime_seconds', 0)
+        })
+    
+    df_hb = pd.DataFrame(heartbeat_data).sort_values('timestamp')
+    
+    # Summary metrics
+    st.markdown("### 📊 Heartbeat Summary")
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric(
+            "Total Heartbeats",
+            len(df_hb),
+            help="Number of heartbeat signals received"
+        )
+    
+    with col2:
+        # Calculate time span
+        if len(df_hb) > 1:
+            time_span = (df_hb['timestamp'].max() - df_hb['timestamp'].min()).total_seconds() / 3600
+            st.metric(
+                "Monitoring Span",
+                f"{time_span:.1f} hours",
+                help="Time period covered by heartbeats"
+            )
+        else:
+            st.metric("Monitoring Span", "N/A")
+    
+    with col3:
+        # Detect gaps (missing heartbeats)
+        if len(df_hb) > 1:
+            df_hb['time_diff'] = df_hb['timestamp'].diff().dt.total_seconds() / 60
+            gaps = df_hb[df_hb['time_diff'] > 10]  # Gaps > 10 minutes (normal is 5 min)
+            st.metric(
+                "Heartbeat Gaps",
+                len(gaps),
+                delta="⚠️ Service may have crashed" if len(gaps) > 0 else None,
+                help="Periods where heartbeats stopped (>10 min gap)"
+            )
+        else:
+            st.metric("Heartbeat Gaps", "0")
+    
+    with col4:
+        avg_memory = df_hb['memory_rss_mb'].mean()
+        st.metric(
+            "Avg Idle Memory",
+            f"{avg_memory:.0f} MB",
+            help="Average memory usage when service is idle"
+        )
+    
+    st.markdown("---")
+    
+    # Timeline visualization
+    st.markdown("### 📅 Heartbeat Timeline")
+    
+    fig = go.Figure()
+    
+    # Heartbeat points
+    fig.add_trace(go.Scatter(
+        x=df_hb['timestamp'],
+        y=[1] * len(df_hb),  # All on same line
+        mode='markers',
+        name='Heartbeat Signal',
+        marker=dict(
+            size=12,
+            color=df_hb['memory_percent'],
+            colorscale='RdYlGn_r',  # Red = high memory, Green = low memory
+            cmin=0,
+            cmax=100,
+            colorbar=dict(title="Memory %"),
+            symbol='diamond',  # Diamond shape for heartbeat markers
+            line=dict(color='white', width=1)
+        ),
+        hovertemplate=(
+            '<b>Heartbeat</b><br>' +
+            'Time: %{x}<br>' +
+            'Memory: ' + df_hb['memory_rss_mb'].astype(str) + ' MB (' + df_hb['memory_percent'].round(1).astype(str) + '%)<br>' +
+            'CPU: ' + df_hb['cpu_percent'].astype(str) + '%<br>' +
+            'Threads: ' + df_hb['num_threads'].astype(str) + '<br>' +
+            'Uptime: ' + (df_hb['uptime_seconds'] / 60).round(1).astype(str) + ' min<br>' +
+            '<extra></extra>'
+        )
+    ))
+    
+    # Detect and mark gaps
+    if len(df_hb) > 1 and 'time_diff' in df_hb.columns:
+        gaps = df_hb[df_hb['time_diff'] > 10].copy()
+        if not gaps.empty:
+            for idx, gap in gaps.iterrows():
+                # Add a gap marker
+                fig.add_annotation(
+                    x=gap['timestamp'],
+                    y=1.2,
+                    text=f"⚠️ {gap['time_diff']:.0f} min gap",
+                    showarrow=True,
+                    arrowhead=2,
+                    arrowcolor="red",
+                    font=dict(color="red", size=10)
+                )
+    
+    fig.update_layout(
+        title="Service Heartbeat Timeline (Idle Periods Only)",
+        xaxis_title="Time",
+        yaxis=dict(
+            showticklabels=False,
+            range=[0.5, 1.5],
+            title=""
+        ),
+        hovermode='closest',
+        height=200
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # System metrics during idle periods
+    st.markdown("### 📈 System Metrics During Idle Periods")
+    
+    tab1, tab2, tab3 = st.tabs(["Memory", "CPU", "Threads & Connections"])
+    
+    with tab1:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Memory usage over time
+            fig = go.Figure()
+            
+            fig.add_trace(go.Scatter(
+                x=df_hb['timestamp'],
+                y=df_hb['memory_rss_mb'],
+                mode='lines+markers',
+                name='Process Memory (RSS)',
+                line=dict(color='#3b82f6', width=2),
+                marker=dict(size=6)
+            ))
+            
+            fig.update_layout(
+                title="Memory Usage During Idle Periods",
+                xaxis_title="Time",
+                yaxis_title="Memory (MB)",
+                hovermode='x unified'
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            # Memory statistics
+            st.markdown("**Memory Statistics (Idle):**")
+            st.write(f"- **Average:** {df_hb['memory_rss_mb'].mean():.0f} MB ({df_hb['memory_percent'].mean():.1f}%)")
+            st.write(f"- **Minimum:** {df_hb['memory_rss_mb'].min():.0f} MB ({df_hb['memory_percent'].min():.1f}%)")
+            st.write(f"- **Maximum:** {df_hb['memory_rss_mb'].max():.0f} MB ({df_hb['memory_percent'].max():.1f}%)")
+            st.write(f"- **Std Dev:** {df_hb['memory_rss_mb'].std():.0f} MB")
+            
+            # Check for memory growth during idle
+            if len(df_hb) > 5:
+                first_half = df_hb.iloc[:len(df_hb)//2]['memory_rss_mb'].mean()
+                second_half = df_hb.iloc[len(df_hb)//2:]['memory_rss_mb'].mean()
+                growth = ((second_half - first_half) / first_half * 100) if first_half > 0 else 0
+                
+                if growth > 5:
+                    st.warning(f"⚠️ **Memory grew {growth:.1f}% during idle** - possible leak")
+                elif growth < -5:
+                    st.success(f"✅ **Memory decreased {abs(growth):.1f}% during idle** - healthy")
+                else:
+                    st.info(f"📊 **Memory change: {growth:+.1f}%** - stable")
+    
+    with tab2:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # CPU usage over time
+            fig = go.Figure()
+            
+            fig.add_trace(go.Scatter(
+                x=df_hb['timestamp'],
+                y=df_hb['cpu_percent'],
+                mode='lines+markers',
+                name='Process CPU',
+                line=dict(color='#22c55e', width=2),
+                marker=dict(size=6)
+            ))
+            
+            fig.add_trace(go.Scatter(
+                x=df_hb['timestamp'],
+                y=df_hb['system_cpu_percent'],
+                mode='lines',
+                name='System CPU',
+                line=dict(color='#f59e0b', width=1, dash='dash'),
+                opacity=0.5
+            ))
+            
+            fig.update_layout(
+                title="CPU Usage During Idle Periods",
+                xaxis_title="Time",
+                yaxis_title="CPU %",
+                hovermode='x unified'
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            st.markdown("**CPU Statistics (Idle):**")
+            st.write(f"- **Avg Process CPU:** {df_hb['cpu_percent'].mean():.1f}%")
+            st.write(f"- **Max Process CPU:** {df_hb['cpu_percent'].max():.1f}%")
+            st.write(f"- **Avg System CPU:** {df_hb['system_cpu_percent'].mean():.1f}%")
+            st.write(f"- **Max System CPU:** {df_hb['system_cpu_percent'].max():.1f}%")
+            
+            if df_hb['cpu_percent'].mean() > 5:
+                st.warning(f"⚠️ **High idle CPU usage** ({df_hb['cpu_percent'].mean():.1f}%) - should be near 0%")
+            else:
+                st.success(f"✅ **Normal idle CPU** ({df_hb['cpu_percent'].mean():.1f}%)")
+    
+    with tab3:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Thread count over time
+            fig = go.Figure()
+            
+            fig.add_trace(go.Scatter(
+                x=df_hb['timestamp'],
+                y=df_hb['num_threads'],
+                mode='lines+markers',
+                name='Thread Count',
+                line=dict(color='#8b5cf6', width=2),
+                marker=dict(size=6),
+                fill='tozeroy'
+            ))
+            
+            fig.update_layout(
+                title="Thread Count During Idle",
+                xaxis_title="Time",
+                yaxis_title="Number of Threads",
+                hovermode='x unified'
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            st.markdown("**Thread & Connection Stats:**")
+            st.write(f"- **Avg Threads:** {df_hb['num_threads'].mean():.0f}")
+            st.write(f"- **Max Threads:** {df_hb['num_threads'].max()}")
+            st.write(f"- **Min Threads:** {df_hb['num_threads'].min()}")
+            st.write(f"- **Avg Connections:** {df_hb['num_connections'].mean():.1f}")
+            st.write(f"- **Max Connections:** {df_hb['num_connections'].max()}")
+            
+            # Check for thread leaks
+            if len(df_hb) > 5:
+                first_threads = df_hb.iloc[:len(df_hb)//2]['num_threads'].mean()
+                last_threads = df_hb.iloc[len(df_hb)//2:]['num_threads'].mean()
+                thread_growth = last_threads - first_threads
+                
+                if thread_growth > 5:
+                    st.warning(f"⚠️ **Threads increased by {thread_growth:.0f}** - possible thread leak")
+                elif thread_growth < -5:
+                    st.info(f"📉 **Threads decreased by {abs(thread_growth):.0f}**")
+                else:
+                    st.success(f"✅ **Thread count stable** ({thread_growth:+.0f})")
+    
+    # Uptime tracking
+    if df_hb['uptime_seconds'].max() > 0:
+        st.markdown("---")
+        st.markdown("### ⏱️ Service Uptime")
+        
+        fig = go.Figure()
+        
+        fig.add_trace(go.Scatter(
+            x=df_hb['timestamp'],
+            y=df_hb['uptime_seconds'] / 3600,  # Convert to hours
+            mode='lines+markers',
+            name='Uptime',
+            line=dict(color='#10b981', width=2),
+            marker=dict(size=6),
+            fill='tozeroy'
+        ))
+        
+        fig.update_layout(
+            title="Service Uptime Over Time",
+            xaxis_title="Time",
+            yaxis_title="Uptime (hours)",
+            hovermode='x unified'
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            max_uptime = df_hb['uptime_seconds'].max() / 3600
+            st.metric(
+                "Max Uptime",
+                f"{max_uptime:.1f} hours",
+                help="Longest continuous uptime recorded"
+            )
+        
+        with col2:
+            # Detect uptime resets (restarts)
+            if len(df_hb) > 1:
+                df_hb['uptime_reset'] = df_hb['uptime_seconds'].diff() < 0
+                restarts = df_hb['uptime_reset'].sum()
+                st.metric(
+                    "Restarts Detected",
+                    restarts,
+                    delta="⚠️ Service restarted" if restarts > 0 else "✅ No restarts",
+                    help="Number of times service restarted during idle periods"
+                )
+            else:
+                st.metric("Restarts Detected", "0")
+        
+        with col3:
+            current_uptime = df_hb.iloc[-1]['uptime_seconds'] / 3600
+            st.metric(
+                "Current Uptime",
+                f"{current_uptime:.1f} hours",
+                help="Uptime at last heartbeat"
+            )
+    
+    # Detailed event log
+    st.markdown("---")
+    st.markdown("### 📋 Heartbeat Event Log")
+    
+    with st.expander("View All Heartbeat Events", expanded=False):
+        # Create a formatted table
+        display_df = df_hb.copy()
+        display_df['timestamp'] = display_df['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
+        display_df['memory'] = display_df['memory_rss_mb'].round(0).astype(str) + ' MB (' + display_df['memory_percent'].round(1).astype(str) + '%)'
+        display_df['cpu'] = display_df['cpu_percent'].astype(str) + '%'
+        display_df['uptime'] = (display_df['uptime_seconds'] / 60).round(1).astype(str) + ' min'
+        
+        st.dataframe(
+            display_df[['timestamp', 'status', 'memory', 'cpu', 'num_threads', 'num_connections', 'uptime']],
+            use_container_width=True
+        )
