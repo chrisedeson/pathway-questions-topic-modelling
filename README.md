@@ -22,12 +22,12 @@ streamlit run app.py
 
 ## Documentation
 
-📚 **[See the Wiki for complete documentation](https://github.com/chrisedeson/pathway-questions-topic-modelling/wiki)**
+📚 **[See the Wiki for complete documentation](https://github.com/PioneerAIAcademy/pathway-questions-topic-modelling/wiki)**
 
-- [Getting Started](https://github.com/chrisedeson/pathway-questions-topic-modelling/wiki/Getting-Started) - Setup and access
-- [Workflow Overview](https://github.com/chrisedeson/pathway-questions-topic-modelling/wiki/Workflow-Overview) - How data flows from questions to analytics
-- [Notebook Guide](https://github.com/chrisedeson/pathway-questions-topic-modelling/wiki/Notebook-Guide) - Running analysis in Google Colab
-- [Dashboard Guide](https://github.com/chrisedeson/pathway-questions-topic-modelling/wiki/Streamlit-Dashboard) - Using the analytics dashboard
+- [Getting Started](https://github.com/PioneerAIAcademy/pathway-questions-topic-modelling/wiki/Getting-Started) - Setup and access
+- [Workflow Overview](https://github.com/PioneerAIAcademy/pathway-questions-topic-modelling/wiki/Workflow-Overview) - How data flows from questions to analytics
+- [Notebook Guide](https://github.com/PioneerAIAcademy/pathway-questions-topic-modelling/wiki/Notebook-Guide) - Running analysis in Google Colab
+- [Dashboard Guide](https://github.com/PioneerAIAcademy/pathway-questions-topic-modelling/wiki/Streamlit-Dashboard) - Using the analytics dashboard
 
 ## Contributing
 

@@ -6,7 +6,7 @@ Thank you for your interest in contributing! This document provides guidelines f
 
 Before contributing, please:
 
-1. **Read the [Wiki](https://github.com/chrisedeson/pathway-questions-topic-modelling/wiki)** to understand the system
+1. **Read the [Wiki](https://github.com/PioneerAIAcademy/pathway-questions-topic-modelling/wiki)** to understand the system
 2. **Contact Christopher or Ernest** for access to:
    - Google Colab notebook
    - AWS credentials
@@ -60,7 +60,7 @@ git --version
 ### Clone Repository
 
 ```bash
-git clone https://github.com/chrisedeson/pathway-questions-topic-modelling.git
+git clone https://github.com/PioneerAIAcademy/pathway-questions-topic-modelling.git
 cd pathway-questions-topic-modelling
 ```
 
@@ -169,7 +169,7 @@ git push origin feature/your-feature-name
 
 ### 6. Create Pull Request
 
-1. Go to [GitHub repository](https://github.com/chrisedeson/pathway-questions-topic-modelling)
+1. Go to [GitHub repository](https://github.com/PioneerAIAcademy/pathway-questions-topic-modelling)
 2. Click "Pull Requests" → "New Pull Request"
 3. Select your branch
 4. Fill in PR template:
@@ -326,7 +326,7 @@ To update wiki:
 
 1. Clone wiki repository:
    ```bash
-   git clone https://github.com/chrisedeson/pathway-questions-topic-modelling.wiki.git
+   git clone https://github.com/PioneerAIAcademy/pathway-questions-topic-modelling.wiki.git
    ```
 
 2. Edit markdown files
@@ -365,9 +365,9 @@ Current version: **v2.0.0**
 ## Questions?
 
 - **Technical questions:** Contact Christopher or Ernest
-- **Bug reports:** Open an [issue](https://github.com/chrisedeson/pathway-questions-topic-modelling/issues)
-- **Feature requests:** Open an [issue](https://github.com/chrisedeson/pathway-questions-topic-modelling/issues)
-- **Documentation:** See the [Wiki](https://github.com/chrisedeson/pathway-questions-topic-modelling/wiki)
+- **Bug reports:** Open an [issue](https://github.com/PioneerAIAcademy/pathway-questions-topic-modelling/issues)
+- **Feature requests:** Open an [issue](https://github.com/PioneerAIAcademy/pathway-questions-topic-modelling/issues)
+- **Documentation:** See the [Wiki](https://github.com/PioneerAIAcademy/pathway-questions-topic-modelling/wiki)
 
 ## Code of Conduct
 
