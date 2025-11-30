@@ -1,47 +1,39 @@
 # BYU Pathway Topic Analysis
 
-Analyze student questions, match to existing topics, and discover new topics using AI.
+Analyze student questions from the [Missionary-Assistant Chatbot](https://missionary-chat.onrender.com/), match them to existing topics, and discover new topics using AI-powered clustering.
 
 ## Quick Start
 
-1. **Run the notebook** to process data and upload to S3:
-   ```bash
-   jupyter notebook notebook/Hybrid_Topic_Discovery_and_Classification_with_AWS_Integration.ipynb
-   ```
+```bash
+# Run analysis in Google Colab (contact Christopher or Ernest for access)
+# Notebook processes data and uploads to S3
 
-2. **Launch the dashboard**:
-   ```bash
-   cd v2.0.0
-   streamlit run app.py
-   ```
-
-3. **Configure** `.env` file with:
-   ```
-   AWS_ACCESS_KEY_ID=your_key
-   AWS_SECRET_ACCESS_KEY=your_secret
-   OPENAI_API_KEY=your_key
-   ```
-
-## Structure
-
-```
-├── v2.0.0/          # Streamlit dashboard (current)
-├── notebook/        # Data processing with Jupyter
-└── v1.0.0/          # Legacy version (archived)
+# View analytics dashboard
+cd v2.0.0
+streamlit run app.py
 ```
 
-## Features
+## What This Does
 
-- Match questions to existing topics using semantic similarity
-- Discover new topics via clustering
-- Interactive dashboard with filtering and visualizations
-- Export results to CSV
+1. **Match questions to existing topics** using AI similarity
+2. **Discover new topics** through clustering analysis
+3. **Provide interactive analytics** via Streamlit dashboard
+4. **Track trends** in student questions over time
 
-## Dashboard Pages
+## Documentation
 
-- **Questions Table**: Filter and search 4,595 questions
-- **Trends & Analytics**: Charts and insights
-- **New Topics**: Review discovered topics
+📚 **[See the Wiki for complete documentation](https://github.com/chrisedeson/pathway-questions-topic-modelling/wiki)**
 
-See `v2.0.0/README.md` for detailed documentation.
+- [Getting Started](https://github.com/chrisedeson/pathway-questions-topic-modelling/wiki/Getting-Started) - Setup and access
+- [Workflow Overview](https://github.com/chrisedeson/pathway-questions-topic-modelling/wiki/Workflow-Overview) - How data flows from questions to analytics
+- [Notebook Guide](https://github.com/chrisedeson/pathway-questions-topic-modelling/wiki/Notebook-Guide) - Running analysis in Google Colab
+- [Dashboard Guide](https://github.com/chrisedeson/pathway-questions-topic-modelling/wiki/Streamlit-Dashboard) - Using the analytics dashboard
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to contribute to this project.
+
+## License
+
+This project is part of the BYU Pathway Worldwide initiative.
 
