@@ -6,7 +6,7 @@ Thank you for your interest in contributing! This document provides guidelines f
 
 Before contributing, please:
 
-1. **Read the [Wiki](https://github.com/PioneerAIAcademy/pathway-questions-topic-modelling/wiki)** to understand the system
+1. **Read the [docs](docs/)** to understand the system
 2. **Contact Christopher or Ernest** for access to:
    - Google Colab notebook
    - AWS credentials
@@ -30,7 +30,7 @@ We welcome contributions in these areas:
 - Performance optimizations
 
 ### 3. Documentation
-- Wiki updates
+- Docs updates
 - Code comments
 - Usage examples
 - Troubleshooting guides
@@ -317,32 +317,12 @@ st.dataframe(data)
 ### When to Update Docs
 
 - **Always** update docs when changing functionality
-- Add to wiki for user-facing changes
+- Update docs/ for user-facing changes
 - Add code comments for implementation details
 
-### Wiki Updates
+### Docs Updates
 
-To update wiki:
-
-1. Clone wiki repository:
-   ```bash
-   git clone https://github.com/PioneerAIAcademy/pathway-questions-topic-modelling.wiki.git
-   ```
-
-2. Edit markdown files
-
-3. Commit and push:
-   ```bash
-   git add .
-   git commit -m "Update documentation for X feature"
-   git push
-   ```
-
-### README Updates
-
-- Keep README.md minimal
-- Point to wiki for details
-- Only update for major changes
+Documentation lives in the `docs/` folder. Edit markdown files there and commit with your changes.
 
 ## Versioning
 
@@ -367,7 +347,7 @@ Current version: **v2.0.0**
 - **Technical questions:** Contact Christopher or Ernest
 - **Bug reports:** Open an [issue](https://github.com/PioneerAIAcademy/pathway-questions-topic-modelling/issues)
 - **Feature requests:** Open an [issue](https://github.com/PioneerAIAcademy/pathway-questions-topic-modelling/issues)
-- **Documentation:** See the [Wiki](https://github.com/PioneerAIAcademy/pathway-questions-topic-modelling/wiki)
+- **Documentation:** See the [docs](docs/) folder
 
 ## Code of Conduct
 

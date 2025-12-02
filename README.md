@@ -1,6 +1,6 @@
 # BYU Pathway Topic Analysis
 
-Analyze student questions from the [Missionary-Assistant Chatbot](https://missionary-chat.onrender.com/), match them to existing topics, and discover new topics using AI-powered clustering.
+Analyze student questions from the [Missionary-Assistant Chatbot](https://github.com/PioneerAIAcademy/pathway-chatbot), match them to existing topics, and discover new topics using AI-powered clustering.
 
 ## Quick Start
 
@@ -22,12 +22,11 @@ streamlit run app.py
 
 ## Documentation
 
-📚 **[See the Wiki for complete documentation](https://github.com/PioneerAIAcademy/pathway-questions-topic-modelling/wiki)**
-
-- [Getting Started](https://github.com/PioneerAIAcademy/pathway-questions-topic-modelling/wiki/Getting-Started) - Setup and access
-- [Workflow Overview](https://github.com/PioneerAIAcademy/pathway-questions-topic-modelling/wiki/Workflow-Overview) - How data flows from questions to analytics
-- [Notebook Guide](https://github.com/PioneerAIAcademy/pathway-questions-topic-modelling/wiki/Notebook-Guide) - Running analysis in Google Colab
-- [Dashboard Guide](https://github.com/PioneerAIAcademy/pathway-questions-topic-modelling/wiki/Streamlit-Dashboard) - Using the analytics dashboard
+| Document | Description |
+|----------|-------------|
+| [Getting Started](docs/getting-started.md) | Setup and access |
+| [Workflow Guide](docs/workflow-guide.md) | Data flow and weekly workflow |
+| [Reference](docs/reference.md) | Commands, structure, troubleshooting |
 
 ## Contributing
 
